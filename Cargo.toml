@@ -1,0 +1,39 @@
+[package]
+name = "kalatori"
+authors = ["Alzymologist Oy <contact@zymologia.fi>"]
+version = "0.1.0"
+edition = "2021"
+description = "A gateway daemon for Kalatori."
+license = "GPL-3.0-or-later"
+repository = "https://github.com/Alzymologist/Kalatori-backend"
+readme = true
+keywords = ["substrate", "blockchain", "finance", "service", "middleware"]
+categories = ["finance"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+env_logger = "0.10"
+log = "0.4"
+subxt = { version = "0.33", features = ["substrate-compat"] }
+axum = "0.7"
+serde = "1"
+redb = "1"
+serde_json = "1"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+
+[lints.rust]
+future_incompatible = "warn"
+let_underscore = "warn"
+rust_2018_idioms = "warn"
+unused = "warn"
+
+[lints.clippy]
+shadow_reuse = "warn"
+shadow_same = "warn"
+shadow_unrelated = "warn"
+cargo_common_metadata = "warn"

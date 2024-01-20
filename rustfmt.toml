@@ -1,0 +1,4 @@
+use_try_shorthand = true
+use_field_init_shorthand = true
+newline_style = "Unix"
+force_explicit_abi = false
