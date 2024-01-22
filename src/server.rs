@@ -18,17 +18,28 @@ pub(crate) const MODULE: &str = module_path!();
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum Response {
-    Error(String),
-    Success {
-        pay_account: String,
-        price: u128,
-        recipient: String,
-        order: String,
-        wss: String,
-        mul: u64,
-        result: String,
-        version: String,
-    },
+    Error(Error),
+    Success(Success),
+}
+
+#[derive(Serialize)]
+pub struct Error {
+    error: String,
+    wss: String,
+    mul: u64,
+    version: String,
+}
+
+#[derive(Serialize)]
+pub struct Success {
+    pay_account: String,
+    price: u128,
+    recipient: String,
+    order: String,
+    wss: String,
+    mul: u64,
+    result: String,
+    version: String,
 }
 
 pub(crate) async fn new(
@@ -65,8 +76,30 @@ async fn handler(
     State(database): State<Arc<Database>>,
     Path((recipient, order, price)): Path<(String, String, u128)>,
 ) -> Json<Response> {
-    let decoded_recip = hex::decode(&recipient[2..]).unwrap();
-    let recipient_account = Account::try_from(decoded_recip.as_ref()).unwrap();
+    let wss = database.rpc().to_string();
+    let mul = database.properties().await.decimals;
+
+    match abcd(database, recipient, order, price).await {
+        Ok(re) => Response::Success(re),
+        Err(error) => Response::Error(Error {
+            wss,
+            mul,
+            version: env!("CARGO_PKG_VERSION").into(),
+            error: error.to_string(),
+        }),
+    }
+    .into()
+}
+
+async fn abcd(
+    database: Arc<Database>,
+    recipient: String,
+    order: String,
+    price: u128,
+) -> Result<Success, anyhow::Error> {
+    let decoded_recip = hex::decode(&recipient[2..])?;
+    let recipient_account = Account::try_from(decoded_recip.as_ref())
+        .map_err(|()| anyhow::anyhow!("Unknown address length"))?;
     let properties = database.properties().await;
     let order_encoded = DeriveJunction::hard(&order).unwrap_inner();
     let invoice_account: Account = database
@@ -78,32 +111,21 @@ async fn handler(
             ]
             .into_iter(),
             None,
-        )
-        .unwrap()
+        )?
         .0
         .public()
         .into();
 
-    if let Some(encoded_invoice) = database
-        .read()
-        .unwrap()
-        .invoices()
-        .unwrap()
-        .get(&invoice_account)
-        .unwrap()
-    {
+    if let Some(encoded_invoice) = database.read()?.invoices()?.get(&invoice_account)? {
         let invoice = encoded_invoice.value();
 
         if let InvoiceStatus::Unpaid(saved_price) = invoice.status {
             if saved_price != price {
-                return Response::Error(format!(
-                    "The invoice was created with different price ({price})."
-                ))
-                .into();
+                anyhow::bail!("The invoice was created with different price ({price}).");
             }
         }
 
-        Response::Success {
+        Ok(Success {
             pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
             price: match invoice.status {
                 InvoiceStatus::Unpaid(uprice) => uprice,
@@ -119,26 +141,22 @@ async fn handler(
             }
             .into(),
             version: env!("CARGO_PKG_VERSION").into(),
-        }
-        .into()
+        })
     } else {
-        let tx = database.write().unwrap();
+        let tx = database.write()?;
 
-        tx.invoices()
-            .unwrap()
-            .save(
-                &invoice_account,
-                &Invoice {
-                    recipient: recipient_account,
-                    order: order_encoded,
-                    status: InvoiceStatus::Unpaid(price),
-                },
-            )
-            .unwrap();
+        tx.invoices()?.save(
+            &invoice_account,
+            &Invoice {
+                recipient: recipient_account,
+                order: order_encoded,
+                status: InvoiceStatus::Unpaid(price),
+            },
+        )?;
 
-        tx.commit().unwrap();
+        tx.commit()?;
 
-        Response::Success {
+        Ok(Success {
             pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
             price,
             wss: database.rpc().to_string(),
@@ -147,7 +165,6 @@ async fn handler(
             order,
             version: env!("CARGO_PKG_VERSION").into(),
             result: "waiting".into(),
-        }
-        .into()
+        })
     }
 }
