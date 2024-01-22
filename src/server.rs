@@ -22,6 +22,8 @@ pub enum Response {
     Success {
         address: String,
         price: u128,
+        recipient: String,
+        order: String,
         wss: String,
         mul: u64,
     },
@@ -63,7 +65,7 @@ async fn handler(
 ) -> Json<Response> {
     let recipient_account = Account::from_string(&recipient).unwrap();
     let properties = database.properties().await;
-    let order_encoded = DeriveJunction::hard(order).unwrap_inner();
+    let order_encoded = DeriveJunction::hard(&order).unwrap_inner();
     let invoice_account: Account = database
         .pair()
         .derive(
@@ -89,6 +91,15 @@ async fn handler(
     {
         let invoice = encoded_invoice.value();
 
+        if let InvoiceStatus::Unpaid(saved_price) = invoice.status {
+            if saved_price != price {
+                return Response::Error(format!(
+                    "The invoice was created with different price ({price})."
+                ))
+                .into();
+            }
+        }
+
         Response::Success {
             address: invoice_account.to_ss58check_with_version(properties.address_format),
             price: match invoice.status {
@@ -97,6 +108,8 @@ async fn handler(
             },
             wss: database.rpc().to_string(),
             mul: properties.decimals,
+            recipient,
+            order,
         }
         .into()
     } else {
@@ -121,6 +134,8 @@ async fn handler(
             price,
             wss: database.rpc().to_string(),
             mul: properties.decimals,
+            recipient,
+            order,
         }
         .into()
     }
