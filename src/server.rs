@@ -10,22 +10,24 @@ use axum::{
 };
 use serde::Serialize;
 use std::{future::Future, net::SocketAddr, sync::Arc};
-use subxt::ext::sp_core::{crypto::Ss58Codec, DeriveJunction, Pair};
+use subxt::ext::sp_core::{hexdisplay::HexDisplay, DeriveJunction, Pair};
 use tokio::{net::TcpListener, sync::watch::Receiver};
 
 pub(crate) const MODULE: &str = module_path!();
 
 #[derive(Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(untagged)]
 pub enum Response {
     Error(String),
     Success {
-        address: String,
+        pay_account: String,
         price: u128,
         recipient: String,
         order: String,
         wss: String,
         mul: u64,
+        result: String,
+        version: String,
     },
 }
 
@@ -63,7 +65,8 @@ async fn handler(
     State(database): State<Arc<Database>>,
     Path((recipient, order, price)): Path<(String, String, u128)>,
 ) -> Json<Response> {
-    let recipient_account = Account::from_string(&recipient).unwrap();
+    let decoded_recip = hex::decode(&recipient[2..]).unwrap();
+    let recipient_account = Account::try_from(decoded_recip.as_ref()).unwrap();
     let properties = database.properties().await;
     let order_encoded = DeriveJunction::hard(&order).unwrap_inner();
     let invoice_account: Account = database
@@ -101,15 +104,21 @@ async fn handler(
         }
 
         Response::Success {
-            address: invoice_account.to_ss58check_with_version(properties.address_format),
+            pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
             price: match invoice.status {
                 InvoiceStatus::Unpaid(uprice) => uprice,
-                InvoiceStatus::Paid => 0,
+                InvoiceStatus::Paid(uprice) => uprice,
             },
             wss: database.rpc().to_string(),
             mul: properties.decimals,
             recipient,
             order,
+            result: match invoice.status {
+                InvoiceStatus::Unpaid(_) => "waiting",
+                InvoiceStatus::Paid(_) => "paid",
+            }
+            .into(),
+            version: env!("CARGO_PKG_VERSION").into(),
         }
         .into()
     } else {
@@ -130,12 +139,14 @@ async fn handler(
         tx.commit().unwrap();
 
         Response::Success {
-            address: invoice_account.to_ss58check_with_version(properties.address_format),
+            pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
             price,
             wss: database.rpc().to_string(),
             mul: properties.decimals,
             recipient,
             order,
+            version: env!("CARGO_PKG_VERSION").into(),
+            result: "waiting".into(),
         }
         .into()
     }

@@ -11,7 +11,8 @@ use std::{
 use subxt::{
     config::{
         signed_extensions::{
-            AnyOf, CheckGenesis, CheckMortality, CheckNonce, CheckSpecVersion, CheckTxVersion, ChargeTransactionPayment,
+            AnyOf, ChargeTransactionPayment, CheckGenesis, CheckMortality, CheckNonce,
+            CheckSpecVersion, CheckTxVersion,
         },
         Header,
     },

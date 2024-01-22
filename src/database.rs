@@ -71,7 +71,7 @@ impl Invoice {
 #[codec(crate = subxt::ext::codec)]
 pub enum InvoiceStatus {
     Unpaid(Balance),
-    Paid,
+    Paid(Balance),
 }
 
 impl RedbValue for Invoice {

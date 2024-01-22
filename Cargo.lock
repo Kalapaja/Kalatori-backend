@@ -2144,6 +2144,7 @@ dependencies = [
  "anyhow",
  "axum",
  "env_logger",
+ "hex",
  "log",
  "redb",
  "serde",

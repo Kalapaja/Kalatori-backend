@@ -721,7 +721,7 @@ impl Processor {
                     .process_unpaid(&block, changes, hash, invoice, price, &mut write_invoices)
                     .await
                     .context("failed to process an unpaid invoice")?,
-                InvoiceStatus::Paid => self
+                InvoiceStatus::Paid(_) => self
                     .process_paid(invoice, &block, changes, hash)
                     .await
                     .context("failed to process a paid invoice")?,
@@ -825,7 +825,7 @@ impl Processor {
         let balance = self.balance(hash, &invoice).await?;
 
         if let Some(remaining) = balance.checked_sub(price) {
-            changes.invoice.status = InvoiceStatus::Paid;
+            changes.invoice.status = InvoiceStatus::Paid(price);
 
             let block_nonce = block
                 .account_nonce(&invoice)
@@ -917,7 +917,6 @@ impl Processor {
         _changes: InvoiceChanges,
         _hash: Hash,
     ) -> Result<()> {
-
         Ok(())
     }
 }
