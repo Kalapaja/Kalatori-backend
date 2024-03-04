@@ -5,9 +5,9 @@ use crate::{
 use anyhow::{Context, Result};
 use redb::{
     backends::InMemoryBackend, AccessGuard, ReadOnlyTable, ReadableTable, RedbValue, Table,
-    TableDefinition, TableHandle, TypeName,
+    TableDefinition, TableHandle, TypeName, Database as RedbDatabase
 };
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 use subxt::{
     ext::{
         codec::{Compact, Decode, Encode},
@@ -65,6 +65,18 @@ impl Invoice {
 
         Ok(PairSigner::new(invoice_pair))
     }
+
+    pub fn price_as_u128(&self) -> u128 {
+        match self.status {
+            InvoiceStatus::Unpaid(price) | InvoiceStatus::Paid(price) => price,
+        }
+    }
+
+    #[allow(clippy::cast_precision_loss)] // We're converting from u128 to f64 for prices, possibly rounding things a bit. Should be fine 🤞
+    pub fn price_as_float(&self, decimals: u64) -> Result<f64> {
+        let mul = 10f64.powi(decimals.try_into()?);
+        Ok(self.price_as_u128() as f64 / mul)
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -72,6 +84,15 @@ impl Invoice {
 pub enum InvoiceStatus {
     Unpaid(Balance),
     Paid(Balance),
+}
+
+impl InvoiceStatus {
+    pub fn status_string(&self) -> String {
+        match self {
+            InvoiceStatus::Unpaid(_) => "unpaid".to_owned(),
+            InvoiceStatus::Paid(_) => "paid".to_owned(),
+        }
+    }
 }
 
 impl RedbValue for Invoice {
@@ -107,7 +128,7 @@ struct DaemonInfo {
 }
 
 pub struct Database {
-    database: redb::Database,
+    underlying_db: RedbDatabase,
     properties: Arc<RwLock<ChainProperties>>,
     pair: Pair,
     rpc: String,
@@ -203,7 +224,7 @@ impl Database {
                 }
 
                 if let Some(encoded_last_block) = last_block_option {
-                    Some(decode_slot::<Compact<BlockNumber>>(encoded_last_block, LAST_BLOCK)?.0)
+                    Some(decode_slot::<Compact<BlockNumber>, Vec<u8>>(encoded_last_block, LAST_BLOCK)?.0)
                 } else {
                     None
                 }
@@ -222,16 +243,16 @@ impl Database {
             .context("failed to compact the database")?;
 
         if compacted {
-            log::debug!("The database was successfully compacted.")
+            log::debug!("The database was successfully compacted.");
         } else {
-            log::debug!("The database doesn't need the compaction.")
+            log::debug!("The database doesn't need the compaction.");
         }
 
         log::info!("Public key from the given seed: \"{public_formatted}\".");
 
         Ok((
             Arc::new(Self {
-                database,
+                underlying_db: database,
                 properties: chain,
                 pair,
                 rpc: given_rpc,
@@ -250,14 +271,14 @@ impl Database {
     }
 
     pub fn write(&self) -> Result<WriteTransaction<'_>> {
-        self.database
+        self.underlying_db
             .begin_write()
             .map(WriteTransaction)
             .context("failed to begin a write transaction for the database")
     }
 
     pub fn read(&self) -> Result<ReadTransaction<'_>> {
-        self.database
+        self.underlying_db
             .begin_read()
             .map(ReadTransaction)
             .context("failed to begin a read transaction for the database")
@@ -292,7 +313,7 @@ impl ReadInvoices<'_> {
             .context("failed to get an invoice from the database")
     }
 
-    pub fn iter(
+    pub fn try_getting_iterator(
         &self,
     ) -> Result<impl Iterator<Item = Result<(AccessGuard<'_, &[u8; 32]>, AccessGuard<'_, Invoice>)>>>
     {
@@ -356,12 +377,12 @@ impl Root<'_, '_> {
 fn get_slot(table: &Table<'_, '_, &str, Vec<u8>>, key: &str) -> Result<Option<Vec<u8>>> {
     table
         .get(key)
-        .map(|slot_option| slot_option.map(|slot| slot.value().to_vec()))
+        .map(|slot_option| slot_option.map(|slot| slot.value().clone()))
         .with_context(|| format!("failed to get the {key:?} slot"))
 }
 
-fn decode_slot<T: Decode>(slot: Vec<u8>, key: &str) -> Result<T> {
-    T::decode(&mut slot.as_ref()).with_context(|| format!("failed to decode the {key:?} slot"))
+fn decode_slot<T: Decode, B: Borrow<[u8]>>(slot: B, key: &str) -> Result<T> {
+    T::decode(&mut slot.borrow()).with_context(|| format!("failed to decode the {key:?} slot"))
 }
 
 fn insert_daemon_info(

@@ -116,17 +116,20 @@ async fn handler(
 
 async fn abcd(
     database: Arc<Database>,
-    rrecipient: Option<String>,
+    recipient_option: Option<String>,
     order: String,
-    pprice: f64,
+    price: f64,
 ) -> Result<Success, anyhow::Error> {
-    let recipient = rrecipient.context("destionation address isn't set")?;
+    let recipient = recipient_option.context("destination address isn't set")?;
     let decoded_recip = hex::decode(&recipient[2..])?;
     let recipient_account = Account::try_from(decoded_recip.as_ref())
         .map_err(|()| anyhow::anyhow!("Unknown address length"))?;
     let properties = database.properties().await;
-    let mul = 10u128.pow(properties.decimals.try_into()?) as f64;
-    let price = (pprice * mul).round() as u128;
+    let mul = 10f64.powi(properties.decimals.try_into()?);
+
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)] // Price is positive, and mul is natural; in case of overflow, the price was too high to begin with 
+    let price_in_plancks = (price * mul).round() as u128;
+    
     let order_encoded = DeriveJunction::hard(&order).unwrap_inner();
     let invoice_account: Account = database
         .pair()
@@ -146,26 +149,19 @@ async fn abcd(
         let invoice = encoded_invoice.value();
 
         if let InvoiceStatus::Unpaid(saved_price) = invoice.status {
-            if saved_price != price {
-                anyhow::bail!("The invoice was created with different price ({price}).");
+            if saved_price != price_in_plancks {
+                anyhow::bail!("The invoice was created with different price ({price_in_plancks}).");
             }
         }
 
         Ok(Success {
             pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
-            price: match invoice.status {
-                InvoiceStatus::Unpaid(uprice) => convert(properties.decimals, uprice)?,
-                InvoiceStatus::Paid(uprice) => convert(properties.decimals, uprice)?,
-            },
+            price: invoice.price_as_float(properties.decimals)?,
             wss: database.rpc().to_string(),
             mul: properties.decimals,
             recipient,
             order,
-            result: match invoice.status {
-                InvoiceStatus::Unpaid(_) => "waiting",
-                InvoiceStatus::Paid(_) => "paid",
-            }
-            .into(),
+            result: invoice.status.status_string(),
             version: env!("CARGO_PKG_VERSION").into(),
         })
     } else {
@@ -176,7 +172,7 @@ async fn abcd(
             &Invoice {
                 recipient: recipient_account,
                 order: order_encoded,
-                status: InvoiceStatus::Unpaid(price),
+                status: InvoiceStatus::Unpaid(price_in_plancks),
             },
         )?;
 
@@ -184,7 +180,7 @@ async fn abcd(
 
         Ok(Success {
             pay_account: format!("0x{}", HexDisplay::from(&invoice_account.as_ref())),
-            price: pprice,
+            price,
             wss: database.rpc().to_string(),
             mul: properties.decimals,
             recipient,
@@ -195,9 +191,3 @@ async fn abcd(
     }
 }
 
-fn convert(dec: u64, num: u128) -> Result<f64> {
-    let numfl = num as f64;
-    let mul = 10u128.pow(dec.try_into()?) as f64;
-
-    Ok(numfl / mul)
-}

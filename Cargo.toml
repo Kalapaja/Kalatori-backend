@@ -40,3 +40,6 @@ shadow_reuse = "warn"
 shadow_same = "warn"
 shadow_unrelated = "warn"
 cargo_common_metadata = "warn"
+
+[package.metadata.scripts]
+full_clippy = "cargo clippy --all-targets --all-features --  -D warnings -D clippy::pedantic -D clippy::correctness -D clippy::complexity -D clippy::perf"

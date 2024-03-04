@@ -117,7 +117,7 @@ pub struct ChainProperties {
 }
 
 impl ChainProperties {
-    async fn fetch_only_constants(
+    fn fetch_only_constants(
         constants: &ConstantsClient<RuntimeConfig, OnlineClient>,
         decimals: Decimals,
     ) -> Result<Self> {
@@ -154,7 +154,7 @@ impl ChainProperties {
                 "failed to decode the decimal places number, expected a positive integer, got \"{encoded_decimals}\""
             ))?;
 
-        Self::fetch_only_constants(constants, decimals).await
+        Self::fetch_only_constants(constants, decimals)
     }
 }
 
@@ -213,7 +213,7 @@ pub async fn prepare(
 
     let (properties_result, decimals_set) = if let Some(decimals) = decimals_option {
         (
-            ChainProperties::fetch_only_constants(&constants, decimals).await,
+            ChainProperties::fetch_only_constants(&constants, decimals),
             true,
         )
     } else {
@@ -331,8 +331,7 @@ impl Updater {
         let (mut current_properties, new_properties_result) = if self.decimals_set {
             let current_properties = self.properties.write().await;
             let new_properties_result =
-                ChainProperties::fetch_only_constants(&self.constants, current_properties.decimals)
-                    .await;
+                ChainProperties::fetch_only_constants(&self.constants, current_properties.decimals);
 
             (current_properties, new_properties_result)
         } else {
@@ -464,7 +463,7 @@ impl ProcessorFinalized {
         // TODO:
         // Design a new DB format to store unpaid accounts in a separate table.
 
-        for invoice_result in self.database.read()?.invoices()?.iter()? {
+        for invoice_result in self.database.read()?.invoices()?.try_getting_iterator()? {
             let invoice = invoice_result?;
 
             match invoice.1.value().status {
@@ -599,9 +598,6 @@ impl ProcessorFinalized {
             let event = event_result.context("failed to decode an event")?;
             let metadata = event.event_metadata();
 
-            const UPDATE: &str = "CodeUpdated";
-            const TRANSFER: &str = "Transfer";
-
             match (metadata.pallet.name(), &*metadata.variant.name) {
                 (SYSTEM, UPDATE) => update = true,
                 (BALANCES, TRANSFER) => Transfer::deserialize(
@@ -693,6 +689,9 @@ pub struct Processor {
     backend: Arc<LegacyBackend<RuntimeConfig>>,
     shutdown_notification: CancellationToken,
 }
+
+const UPDATE: &str = "CodeUpdated";
+const TRANSFER: &str = "Transfer";
 
 impl Processor {
     pub fn new(
@@ -981,9 +980,6 @@ impl Processor {
             let event = event_result.context("failed to decode an event")?;
             let metadata = event.event_metadata();
 
-            const UPDATE: &str = "CodeUpdated";
-            const TRANSFER: &str = "Transfer";
-
             match (metadata.pallet.name(), &*metadata.variant.name) {
                 (SYSTEM, UPDATE) => update = true,
                 (BALANCES, TRANSFER) => Transfer::deserialize(
@@ -998,14 +994,11 @@ impl Processor {
         }
 
         for (invoice, changes) in invoices_changes {
-            let price = match changes.invoice.status {
-                InvoiceStatus::Unpaid(price) => price,
-                InvoiceStatus::Paid(price) => price,
-            };
+            let price = changes.invoice.price_as_u128();
 
             self.process_unpaid(&block, changes, hash, invoice, price)
                 .await
-                .context("failed to process an unpaid invoice")?
+                .context("failed to process an unpaid invoice")?;
         }
 
         if update {
@@ -1186,16 +1179,6 @@ impl Processor {
             }
         }
 
-        Ok(())
-    }
-
-    async fn process_paid(
-        &self,
-        _invoice: Account,
-        _block: &Block<RuntimeConfig, OnlineClient>,
-        _changes: InvoiceChanges,
-        _hash: Hash,
-    ) -> Result<()> {
         Ok(())
     }
 }

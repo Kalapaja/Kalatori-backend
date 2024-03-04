@@ -1,7 +1,7 @@
 use anyhow::{Context, Error, Result};
 use database::Database;
 use env_logger::{Builder, Env};
-use environment_variables::*;
+use environment_variables::{DATABASE, DECIMALS, DESTINATION, HOST, IN_MEMORY_DB, LOG, LOG_STYLE, OVERRIDE_RPC, RPC, SEED};
 use log::LevelFilter;
 use rpc::Processor;
 use std::{
@@ -88,6 +88,7 @@ impl Config for RuntimeConfig {
 
 #[doc(hidden)]
 #[tokio::main]
+#[allow(clippy::too_many_lines)] // FIXME: Better structured main() is needed
 pub async fn main() -> Result<()> {
     let mut builder = Builder::new();
 
