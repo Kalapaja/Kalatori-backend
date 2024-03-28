@@ -2217,7 +2217,7 @@ dependencies = [
 
 [[package]]
 name = "kalatori"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -2235,7 +2235,7 @@ dependencies = [
 
 [[package]]
 name = "kalatori-ah"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
