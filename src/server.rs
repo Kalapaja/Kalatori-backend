@@ -10,13 +10,21 @@ use axum::{
     routing, Json, Router,
 };
 use axum_macros::debug_handler;
-use serde::{Serialize, Serializer};
+use serde::{Serialize, Deserialize, Serializer};
 use std::{borrow::Cow, collections::HashMap, future::Future, net::SocketAddr};
 
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 pub const MODULE: &str = module_path!();
+
+#[derive(Debug, Deserialize)]
+struct OrderPayload {
+    currency: String,
+    amount: f64,
+    #[serde(default)]
+    callback: Option<String>,
+}
 
 pub async fn new(
     shutdown_notification: CancellationToken,
@@ -65,7 +73,7 @@ async fn process_order(
     state: State,
     matched_path: &MatchedPath,
     path_result: Result<RawPathParams, RawPathParamsRejection>,
-    query: &HashMap<String, String>,
+    payload: OrderPayload,
 ) -> Result<OrderResponse, OrderError> {
     const ORDER_ID: &str = "order_id";
 
@@ -77,49 +85,34 @@ async fn process_order(
         .ok_or_else(|| OrderError::MissingParameter(ORDER_ID.into()))?
         .to_owned();
 
-    if query.is_empty() {
-        state
-            .order_status(&order)
-            .await
-            .map_err(|_| OrderError::InternalError)
-    } else {
-        let get_parameter = |parameter: &str| {
-            query
-                .get(parameter)
-                .ok_or_else(|| OrderError::MissingParameter(parameter.into()))
-        };
+    let currency = payload.currency;
+    let amount = payload.amount;
+    let callback = payload.callback.unwrap_or_default(); // Use empty string if callback is not provided
 
-        let currency = get_parameter(CURRENCY)?.to_owned();
-        let callback = get_parameter(CALLBACK)?.to_owned();
-        let amount = get_parameter(AMOUNT)?
-            .parse()
-            .map_err(|_| OrderError::InvalidParameter(AMOUNT.into()))?;
-
-
-        if amount < 0.07 {
-            return Err(OrderError::LessThanExistentialDeposit(0.07));
-        }
-
-        state
-            .create_order(OrderQuery {
-                order,
-                amount,
-                callback,
-                currency,
-            })
-            .await
-            .map_err(|_| OrderError::InternalError)
+    if amount < 0.07 {
+        return Err(OrderError::LessThanExistentialDeposit(0.07));
     }
+
+    state
+        .create_order(OrderQuery {
+            order,
+            amount,
+            callback,
+            currency,
+        })
+        .await
+        .map_err(|_| OrderError::InternalError)
 }
+
 
 #[debug_handler]
 async fn order(
     extract::State(state): extract::State<State>,
     matched_path: MatchedPath,
     path_result: Result<RawPathParams, RawPathParamsRejection>,
-    query: Query<HashMap<String, String>>,
+    Json(payload): Json<OrderPayload>,
 ) -> Response {
-    match process_order(state, &matched_path, path_result, &query).await {
+    match process_order(state, &matched_path, path_result, payload).await {
         Ok(order) => match order {
             OrderResponse::NewOrder(order_status) => (StatusCode::CREATED, Json(order_status)).into_response(),
             OrderResponse::FoundOrder(order_status) => (StatusCode::OK, Json(order_status)).into_response(),
@@ -131,7 +124,7 @@ async fn order(
             OrderError::LessThanExistentialDeposit(existential_deposit) => (
                 StatusCode::BAD_REQUEST,
                 Json([InvalidParameter {
-                    parameter: AMOUNT.into(),
+                    parameter: "amount".into(),
                     message: format!("provided amount is less than the currency's existential deposit ({existential_deposit})"),
                 }]),
             )
@@ -139,7 +132,7 @@ async fn order(
             OrderError::UnknownCurrency => (
                 StatusCode::BAD_REQUEST,
                 Json([InvalidParameter {
-                    parameter: CURRENCY.into(),
+                    parameter: "currency".into(),
                     message: "provided currency isn't supported".into(),
                 }]),
             )
