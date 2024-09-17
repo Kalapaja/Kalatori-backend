@@ -2,7 +2,7 @@
 
 use std::ops::{Deref, Sub};
 
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 
 pub type Version = u64;
 pub type Nonce = u32;
@@ -93,12 +93,13 @@ pub mod api_v2 {
     #[derive(Encode, Decode, Debug, Clone, Copy, Serialize, Deserialize)]
     pub struct Timestamp(pub u64);
 
-    #[derive(Debug)]
+    #[derive(Debug, Deserialize, Serialize)]
     pub struct OrderQuery {
         pub order: String,
         pub amount: f64,
-        pub callback: String,
         pub currency: String,
+        #[serde(default)]
+        pub callback: Option<String>,
     }
 
     #[derive(Debug)]
@@ -128,7 +129,7 @@ pub mod api_v2 {
         pub payment_status: PaymentStatus,
         pub amount: f64,
         pub currency: CurrencyInfo,
-        pub callback: String,
+        pub callback: Option<String>,
         pub transactions: Vec<TransactionInfo>,
         pub payment_account: String,
         pub death: Timestamp,

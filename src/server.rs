@@ -18,14 +18,6 @@ use tokio_util::sync::CancellationToken;
 
 pub const MODULE: &str = module_path!();
 
-#[derive(Debug, Deserialize)]
-struct OrderPayload {
-    currency: String,
-    amount: f64,
-    #[serde(default)]
-    callback: Option<String>,
-}
-
 pub async fn new(
     shutdown_notification: CancellationToken,
     host: SocketAddr,
@@ -73,7 +65,7 @@ async fn process_order(
     state: State,
     matched_path: &MatchedPath,
     path_result: Result<RawPathParams, RawPathParamsRejection>,
-    payload: OrderPayload,
+    payload: OrderQuery,
 ) -> Result<OrderResponse, OrderError> {
     const ORDER_ID: &str = "order_id";
 
@@ -87,7 +79,7 @@ async fn process_order(
 
     let currency = payload.currency;
     let amount = payload.amount;
-    let callback = payload.callback.unwrap_or_default(); // Use empty string if callback is not provided
+    let callback = payload.callback;
 
     if amount < 0.07 {
         return Err(OrderError::LessThanExistentialDeposit(0.07));
@@ -105,14 +97,38 @@ async fn process_order(
 }
 
 
+
 #[debug_handler]
 async fn order(
     extract::State(state): extract::State<State>,
     matched_path: MatchedPath,
     path_result: Result<RawPathParams, RawPathParamsRejection>,
-    Json(payload): Json<OrderPayload>,
+    extract::Path(order_id): extract::Path<String>,
+    Json(mut payload): Json<HashMap<String, serde_json::Value>>,
 ) -> Response {
-    match process_order(state, &matched_path, path_result, payload).await {
+    // Manually constructing OrderQuery because need to mix 2 path and payload
+    let currency = payload
+        .remove("currency")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let amount = payload
+        .remove("amount")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+
+    let callback = payload
+        .remove("callback")
+        .and_then(|v| v.as_str().map(String::from));
+
+    let order_query = OrderQuery {
+        order: order_id,
+        currency,
+        amount,
+        callback,
+    };
+
+    match process_order(state, &matched_path, path_result, order_query).await {
         Ok(order) => match order {
             OrderResponse::NewOrder(order_status) => (StatusCode::CREATED, Json(order_status)).into_response(),
             OrderResponse::FoundOrder(order_status) => (StatusCode::OK, Json(order_status)).into_response(),
