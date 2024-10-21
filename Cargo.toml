@@ -44,7 +44,7 @@ toml_edit = { version = "0.22", features = ["serde"]}
 sled = "0.34"
 zeroize = "1.7"
 clap = { version = "4", features = ["derive", "cargo", "string", "env"] }
-shadow-rs = { version = "0.28", default-features = false }
+shadow-rs = { version = "0.35", default-features = false }
 futures = "0.3"
 ahash = "0.8"
 
@@ -54,7 +54,7 @@ mnemonic-external = { git = "https://github.com/Alzymologist/mnemonic-external" 
 substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light" }
 
 [build-dependencies]
-shadow-rs = { version = "0.28", default-features = false, features = ["git2"] }
+shadow-rs = { version = "0.35", default-features = false, features = ["git2"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
