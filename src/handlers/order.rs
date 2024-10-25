@@ -52,6 +52,7 @@ pub async fn process_order(
             .create_order(OrderQuery {
                 order: order_id,
                 amount: payload.amount.unwrap(),
+                repaid_amount: 0.0,
                 callback: payload.callback.unwrap_or_default(),
                 currency: payload.currency.unwrap(),
             })

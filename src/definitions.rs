@@ -101,6 +101,7 @@ pub mod api_v2 {
     pub struct OrderQuery {
         pub order: String,
         pub amount: f64,
+        pub repaid_amount: f64,
         pub callback: String,
         pub currency: String,
     }
@@ -131,6 +132,7 @@ pub mod api_v2 {
         pub withdrawal_status: WithdrawalStatus,
         pub payment_status: PaymentStatus,
         pub amount: f64,
+        pub repaid_amount: f64,
         pub currency: CurrencyInfo,
         pub callback: String,
         pub transactions: Vec<TransactionInfo>,
@@ -149,6 +151,7 @@ pub mod api_v2 {
                 withdrawal_status: WithdrawalStatus::Waiting,
                 payment_status: PaymentStatus::Pending,
                 amount: query.amount,
+                repaid_amount: query.repaid_amount,
                 currency,
                 callback: query.callback,
                 transactions: Vec::new(),
