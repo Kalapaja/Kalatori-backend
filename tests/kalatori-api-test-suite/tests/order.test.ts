@@ -50,6 +50,7 @@ describe('Order Endpoint Blackbox Tests', () => {
     expect(orderResponseObject).toHaveProperty('withdrawal_status', 'waiting');
     expect(orderResponseObject).toHaveProperty('payment_status', 'pending');
     expect(orderResponseObject).toHaveProperty('amount', orderData.amount);
+    expect(orderResponseObject).toHaveProperty('repaid_amount', 0);
 
     expect(orderResponseObject).toHaveProperty('callback', orderData.callback);
     expect(orderResponseObject).toHaveProperty('transactions');
@@ -226,6 +227,7 @@ describe('Order Endpoint Blackbox Tests', () => {
     await transferFunds(orderDetails.currency.rpc_url, paymentAccount, dotOrderData.amount);
 
     const repaidOrderDetails = await getOrderDetails(orderId);
+    expect(repaidOrderDetails.repaid_amount).toBe(dotOrderData.amount);
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
   }, 30000);
@@ -245,6 +247,7 @@ describe('Order Endpoint Blackbox Tests', () => {
     );
 
     const repaidOrderDetails = await getOrderDetails(orderId);
+    expect(repaidOrderDetails.repaid_amount).toBe(usdcOrderData.amount);
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
   }, 30000);
@@ -266,6 +269,7 @@ describe('Order Endpoint Blackbox Tests', () => {
       orderDetails.currency.asset_id
     );
     let repaidOrderDetails = await getOrderDetails(orderId);
+    expect(repaidOrderDetails.repaid_amount).toBe(halfAmount);
     expect(repaidOrderDetails.payment_status).toBe('pending');
     expect(repaidOrderDetails.withdrawal_status).toBe('waiting');
 
@@ -277,6 +281,7 @@ describe('Order Endpoint Blackbox Tests', () => {
       orderDetails.currency.asset_id
     );
     repaidOrderDetails = await getOrderDetails(orderId);
+    expect(repaidOrderDetails.repaid_amount).toBe(orderDetails.amount);
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
   }, 30000);
