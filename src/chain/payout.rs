@@ -103,8 +103,11 @@ pub async fn payout(
 
         let signature = signer.sign(order.id, sign_this).await?;
 
-        batch_transaction.signature.content =
-            TypeContentToFill::SpecialType(SpecialTypeToFill::SignatureSr25519(Some(signature)));
+        if let TypeContentToFill::Variant(ref mut multisig) = batch_transaction.signature.content {
+            if let TypeContentToFill::ArrayU8(ref mut sr25519) = multisig.selected.fields_to_fill[0].type_to_fill.content {
+                sr25519.content = signature.0.to_vec();
+            }
+        }
 
         let extrinsic = batch_transaction
             .send_this_signed::<(), RuntimeMetadataV15>(&chain.metadata)?
