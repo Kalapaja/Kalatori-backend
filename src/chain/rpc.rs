@@ -13,21 +13,21 @@ use crate::{
         api_v2::{AssetId, TokenKind},
         Balance,
     },
-    error::{ChainError, NotHex},
+    error::{ChainError, NotHexError},
     utils::unhex,
 };
+use codec::{DecodeAll, Encode};
 use frame_metadata::{
     v15::{RuntimeMetadataV15, StorageEntryMetadata, StorageEntryType},
     RuntimeMetadata,
 };
+use hashing::twox_128;
 use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
-use parity_scale_codec::{DecodeAll, Encode};
 use scale_info::{form::PortableForm, PortableRegistry, TypeDef, TypeDefPrimitive};
 use serde::Deserialize;
 use serde_json::{Number, Value};
-use sp_crypto_hashing::twox_128;
 use std::{collections::HashMap, fmt::Debug};
 use substrate_crypto_light::common::AccountId32;
 use substrate_parser::{
@@ -98,8 +98,8 @@ pub async fn get_keys_from_storage(
     let mut keys_vec = Vec::new();
     let storage_key_prefix = format!(
         "0x{}{}",
-        hex::encode(twox_128(prefix.as_bytes())),
-        hex::encode(twox_128(storage_name.as_bytes()))
+        const_hex::encode(twox_128(prefix.as_bytes())),
+        const_hex::encode(twox_128(storage_name.as_bytes()))
     );
 
     let count = 10; // TODO make full scan just in case
@@ -198,7 +198,7 @@ pub async fn metadata(
         .map_err(ChainError::Client)?;
     match metadata_request {
         Value::String(x) => {
-            let metadata_request_raw = unhex(&x, NotHex::Metadata)?;
+            let metadata_request_raw = unhex(&x, NotHexError::Metadata)?;
             let maybe_metadata_raw = Option::<Vec<u8>>::decode_all(&mut &metadata_request_raw[..])
                 .map_err(|_| ChainError::RawMetadataNotDecodeable)?;
             if let Some(meta_v15_bytes) = maybe_metadata_raw {
@@ -320,8 +320,8 @@ pub async fn assets_set_at_block(
                     if let Value::String(string_key) = key {
                         let value_fetch = get_value_from_storage(client, string_key, block).await?;
                         if let Value::String(ref string_value) = value_fetch {
-                            let key_data = unhex(string_key, NotHex::StorageKey)?;
-                            let value_data = unhex(string_value, NotHex::StorageValue)?;
+                            let key_data = unhex(string_key, NotHexError::StorageKey)?;
+                            let value_data = unhex(string_value, NotHexError::StorageValue)?;
                             let storage_entry =
                                 decode_as_storage_entry::<&[u8], (), RuntimeMetadataV15>(
                                     &key_data.as_ref(),
@@ -384,11 +384,13 @@ pub async fn assets_set_at_block(
                                                 TypeDef::Primitive(TypeDefPrimitive::U32) => {
                                                     let key_assets_metadata = format!(
                                                         "0x{}{}{}",
-                                                        hex::encode(twox_128("Assets".as_bytes())),
-                                                        hex::encode(twox_128(
+                                                        const_hex::encode(twox_128(
+                                                            "Assets".as_bytes()
+                                                        )),
+                                                        const_hex::encode(twox_128(
                                                             "Metadata".as_bytes()
                                                         )),
-                                                        hex::encode(hashed_key_element(
+                                                        const_hex::encode(hashed_key_element(
                                                             &asset_id.encode(),
                                                             hasher
                                                         ))
@@ -404,7 +406,7 @@ pub async fn assets_set_at_block(
                                                     {
                                                         let value_data = unhex(
                                                             string_value,
-                                                            NotHex::StorageValue,
+                                                            NotHexError::StorageValue,
                                                         )?;
                                                         let value = decode_all_as_type::<
                                                             &[u8],
@@ -557,7 +559,7 @@ pub async fn asset_balance_at_account(
 
     let value_fetch = get_value_from_storage(client, &query.key, block).await?;
     if let Value::String(ref string_value) = value_fetch {
-        let value_data = unhex(string_value, NotHex::StorageValue)?;
+        let value_data = unhex(string_value, NotHexError::StorageValue)?;
         let value = decode_all_as_type::<&[u8], (), RuntimeMetadataV15>(
             &query.value_ty,
             &value_data.as_ref(),
@@ -593,7 +595,7 @@ pub async fn system_balance_at_account(
 
     let value_fetch = get_value_from_storage(client, &query.key, block).await?;
     if let Value::String(ref string_value) = value_fetch {
-        let value_data = unhex(string_value, NotHex::StorageValue)?;
+        let value_data = unhex(string_value, NotHexError::StorageValue)?;
         let value = decode_all_as_type::<&[u8], (), RuntimeMetadataV15>(
             &query.value_ty,
             &value_data.as_ref(),
@@ -659,10 +661,10 @@ async fn events_at_block(
                 for key in keys_array {
                     if let Value::String(key) = key {
                         let data_from_storage = get_value_from_storage(client, &key, block).await?;
-                        let key_bytes = unhex(&key, NotHex::StorageValue)?;
+                        let key_bytes = unhex(&key, NotHexError::StorageValue)?;
                         let value_bytes =
                             if let Value::String(data_from_storage) = data_from_storage {
-                                unhex(&data_from_storage, NotHex::StorageValue)?
+                                unhex(&data_from_storage, NotHexError::StorageValue)?
                             } else {
                                 return Err(ChainError::StorageValueFormat(data_from_storage));
                             };
@@ -725,7 +727,7 @@ pub async fn current_block_number(
     let block_number_query = block_number_query(metadata)?;
     let fetched_value = get_value_from_storage(client, &block_number_query.key, block).await?;
     if let Value::String(hex_data) = fetched_value {
-        let value_data = unhex(&hex_data, NotHex::StorageValue)?;
+        let value_data = unhex(&hex_data, NotHexError::StorageValue)?;
         let value = decode_all_as_type::<&[u8], (), RuntimeMetadataV15>(
             &block_number_query.value_ty,
             &value_data.as_ref(),

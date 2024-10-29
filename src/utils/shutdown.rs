@@ -1,37 +1,37 @@
+//! The shutdown module.
+//!
+//! Handles a graceful shutdown with an asynchronous runtime with respect of panics (by
+//! incorporating a custom panic handler) & unrecoverable errors from another modules.
+
 use crate::error::Error;
+use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Result as IoResult,
-    panic::{self, PanicInfo},
-    process,
+    panic::{self, PanicHookInfo},
     sync::Arc,
     time::Duration,
 };
-use tokio::{signal, sync::RwLock, time};
+use tokio::{signal, time};
 use tokio_util::sync::CancellationToken;
 
+pub const MODULE: &str = module_path!();
+
+const TIP_FUSE_SECS: u64 = 15;
+
 #[derive(Clone)]
-#[allow(clippy::module_name_repetitions)]
+#[expect(clippy::module_name_repetitions)]
 pub struct ShutdownNotification {
     pub token: CancellationToken,
-    pub reason: Arc<RwLock<ShutdownReason>>,
+    pub outcome: Arc<RwLock<ShutdownOutcome>>,
 }
 
 impl ShutdownNotification {
     pub fn new() -> Self {
         Self {
             token: CancellationToken::new(),
-            reason: Arc::new(RwLock::new(ShutdownReason::UserRequested)),
+            outcome: Arc::new(RwLock::new(ShutdownOutcome::UserRequested)),
         }
-    }
-
-    pub fn is_ignited(&self) -> bool {
-        self.token.is_cancelled()
-    }
-
-    pub async fn ignite(&self) {
-        *self.reason.write().await = ShutdownReason::UnrecoverableError;
-        self.token.cancel();
     }
 }
 
@@ -39,8 +39,6 @@ pub async fn listener(
     shutdown_notification: CancellationToken,
     shutdown_completed: CancellationToken,
 ) -> Result<(), Error> {
-    const TIP_TIMEOUT_SECS: u64 = 30;
-
     tokio::select! {
         biased;
         result = signal::ctrl_c() => {
@@ -50,7 +48,9 @@ pub async fn listener(
 
             shutdown_notification.cancel();
         }
-        () = shutdown_notification.cancelled() => {}
+        () = shutdown_notification.cancelled() => {
+            tracing::info!("The shutdown started by an unrecoverable error...");
+        }
     }
 
     let shutdown_completed_clone = shutdown_completed.clone();
@@ -58,9 +58,10 @@ pub async fn listener(
         tokio::select! {
             biased;
             () = shutdown_completed_clone.cancelled() => {}
-            () = time::sleep(Duration::from_secs(TIP_TIMEOUT_SECS)) => {
+            () = time::sleep(Duration::from_secs(TIP_FUSE_SECS)) => {
                 tracing::warn!(
-                    "Send the shutdown signal one more time to kill the daemon instead of waiting for the graceful shutdown."
+                    "Send the shutdown signal one more time to early terminate the daemon \
+                    instead of waiting for the graceful shutdown."
                 );
             }
         }
@@ -72,15 +73,15 @@ pub async fn listener(
         result = signal::ctrl_c() => {
             process_signal(result)?;
 
-            tracing::info!("Received the second shutdown signal. Killing the daemon...");
+            tracing::info!("Received the second shutdown signal. Terminating the daemon...");
 
-            process::abort()
+            return Ok(());
         }
     }
 
     tip.await.expect("tip task shouldn't panic");
 
-    tracing::info!("The shutdown signal listener is shut down.");
+    tracing::debug!("The shutdown signal listener is shut down.");
 
     Ok(())
 }
@@ -88,16 +89,17 @@ pub async fn listener(
 fn process_signal(result: IoResult<()>) -> Result<(), Error> {
     result.map_err(Error::ShutdownSignal)?;
 
-    println!(); // Print shutdown log messages on the next line after the Control-C command.
+    // Print shutdown log messages on the next line after the Control-C command.
+    println!();
 
     Ok(())
 }
 
 #[derive(Clone, Copy)]
-#[allow(clippy::module_name_repetitions)]
-pub enum ShutdownReason {
+#[expect(clippy::module_name_repetitions)]
+pub enum ShutdownOutcome {
     UserRequested,
-    UnrecoverableError,
+    UnrecoverableError { panic: bool },
 }
 
 pub fn set_panic_hook(
@@ -105,27 +107,34 @@ pub fn set_panic_hook(
     shutdown_notification: ShutdownNotification,
 ) {
     panic::set_hook(Box::new(move |panic_info| {
-        let reason = *shutdown_notification.reason.blocking_read();
+        let outcome = shutdown_notification.outcome.upgradable_read_blocking();
 
-        let first = match reason {
-            ShutdownReason::UserRequested => false,
-            ShutdownReason::UnrecoverableError => {
-                *shutdown_notification.reason.blocking_write() = ShutdownReason::UnrecoverableError;
-                true
-            }
+        let first = if matches!(
+            *outcome,
+            ShutdownOutcome::UnrecoverableError { panic: true }
+        ) {
+            false
+        } else {
+            *RwLockUpgradableReadGuard::upgrade_blocking(outcome) =
+                ShutdownOutcome::UnrecoverableError { panic: true };
+
+            shutdown_notification.token.cancel();
+
+            true
         };
 
         print(PrettyPanic { panic_info, first });
-
-        shutdown_notification.token.cancel();
     }));
 }
 
 pub struct PrettyPanic<'a> {
-    panic_info: &'a PanicInfo<'a>,
+    panic_info: &'a PanicHookInfo<'a>,
     first: bool,
 }
 
+// It looks like it's impossible to acquire `PanicInfo` outside of `panic::set_hook`, which
+// could alter execution of other unit tests, so, without mocking the `panic_info` field,
+// there's no way to test the `Display`ing.
 impl Display for PrettyPanic<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("A panic detected")?;
@@ -149,6 +158,7 @@ impl Display for PrettyPanic<'_> {
         f.write_str(".")?;
 
         // Print the report request only on the first panic.
+
         if self.first {
             f.write_str(concat!(
                 "\n\nThis is a bug. Please report it at ",

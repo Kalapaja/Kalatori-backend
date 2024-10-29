@@ -14,10 +14,10 @@ use crate::{
         Version,
     },
     error::{DbError, Error},
-    task_tracker::TaskTracker,
+    utils::task_tracker::TaskTracker,
 };
+use codec::{Decode, Encode};
 use names::{Generator, Name};
-use parity_scale_codec::{Decode, Encode};
 use std::time::SystemTime;
 use substrate_crypto_light::common::AccountId32;
 use tokio::sync::{mpsc, oneshot};
@@ -278,7 +278,7 @@ impl Database {
 
             drop(database.flush());
 
-            Ok("Database server is shutting down".into())
+            Ok("Database server is shutting down")
         });
 
         Ok(Self { tx })

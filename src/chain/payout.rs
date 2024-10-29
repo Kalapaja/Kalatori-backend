@@ -113,7 +113,7 @@ pub async fn payout(
             .send_this_signed::<(), RuntimeMetadataV15>(&chain.metadata)?
             .ok_or(ChainError::NothingToSend)?;
 
-        send_stuff(&client, &format!("0x{}", hex::encode(extrinsic))).await?;
+        send_stuff(&client, &format!("0x{}", const_hex::encode(extrinsic))).await?;
 
         // TODO obvious
     }

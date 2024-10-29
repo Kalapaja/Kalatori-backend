@@ -1,6 +1,10 @@
 target
+tests/kalatori-api-test-suite/node_modules/
 *.db
+*.txt
+kalatori.toml
 
 # IDE
+
 .vscode
 .idea

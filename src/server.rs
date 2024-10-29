@@ -46,7 +46,9 @@ pub async fn new(
         .await
         .map_err(|_| ServerError::TcpListenerBind(host))?;
 
-    Ok(async {
+    Ok(async move {
+        tracing::info!("The server is listening on {host}.");
+
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_notification.cancelled_owned())
             .await

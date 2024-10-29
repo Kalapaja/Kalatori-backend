@@ -1,7 +1,7 @@
 use crate::{
     definitions::{api_v2::Timestamp, Chain},
     error::{Error, SeedEnvError},
-    logger,
+    utils::logger,
 };
 use ahash::AHashMap;
 use clap::{Arg, ArgAction, Parser};

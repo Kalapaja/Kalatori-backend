@@ -1,20 +1,20 @@
-use crate::{callback, chain, database, error::Error, server};
+use super::shutdown;
+use crate::{callback, database, error::Error, server};
 use tracing_subscriber::{fmt::time::UtcTime, EnvFilter};
 
 const TARGETS: &[&str] = &[
     callback::MODULE,
     database::MODULE,
-    chain::MODULE,
     server::MODULE,
+    shutdown::MODULE,
     env!("CARGO_PKG_NAME"),
 ];
 const COMMA: &str = ",";
 const INFO: &str = "=info";
 const OFF: &str = "off";
 
-pub fn initialize(directives: String) -> Result<(), Error> {
-    let filter =
-        EnvFilter::try_new(&directives).map_err(|e| Error::LoggerDirectives(directives, e))?;
+pub fn initialize(directives: impl AsRef<str>) -> Result<(), Error> {
+    let filter = EnvFilter::try_new(directives)?;
 
     tracing_subscriber::fmt()
         .with_timer(UtcTime::rfc_3339())

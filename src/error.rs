@@ -1,11 +1,12 @@
 use crate::{
     arguments::{OLD_SEED, SEED},
     definitions::api_v2::OrderStatus,
+    utils::task_tracker::TaskName,
 };
+use codec::Error as ScaleError;
 use frame_metadata::v15::RuntimeMetadataV15;
 use jsonrpsee::core::ClientError;
 use mnemonic_external::error::ErrorWordList;
-use parity_scale_codec::Error as ScaleError;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 use sled::Error as DatabaseError;
@@ -58,8 +59,11 @@ pub enum Error {
     #[error("failed to initialize the asynchronous runtime")]
     Runtime(#[source] IoError),
 
-    #[error("failed to parse given filter directives for the logger ({0:?})")]
-    LoggerDirectives(String, #[source] ParseError),
+    #[error("failed to parse given filter directives for the logger")]
+    LoggerDirectives(#[from] ParseError),
+
+    #[error("failed to complete {0}")]
+    Task(TaskName, #[source] TaskError),
 
     #[error("receiver account couldn't be parsed")]
     RecipientAccount(#[from] CryptoError),
@@ -80,6 +84,10 @@ pub enum SeedEnvError {
     #[error("`{SEED}` isn't present")]
     SeedNotPresent,
 }
+
+#[derive(Debug, Error)]
+#[expect(clippy::module_name_repetitions)]
+pub enum TaskError {}
 
 #[derive(Debug, Error)]
 #[allow(clippy::module_name_repetitions)]
@@ -372,7 +380,7 @@ pub enum ServerError {
 #[allow(clippy::module_name_repetitions)]
 pub enum UtilError {
     #[error("...")]
-    NotHex(NotHex),
+    NotHex(NotHexError),
 }
 
 #[derive(Debug, Error)]
@@ -392,7 +400,7 @@ pub enum SignerError {
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-pub enum NotHex {
+pub enum NotHexError {
     #[error("block hash string isn't a valid hexadecimal")]
     BlockHash,
 
@@ -428,6 +436,12 @@ mod pretty_cause {
 
     impl<T: Error> Display for Wrapper<'_, T> {
         fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            f.write_str("\n    ")?;
+
+            Display::fmt(&self.0, f)?;
+
+            f.write_str(".")?;
+
             let Some(cause) = self.0.source() else {
                 // If an error has no source, print nothing.
                 return Ok(());
@@ -504,13 +518,21 @@ mod pretty_cause {
         };
 
         #[test]
-        fn empty() {
-            assert!(TestError::empty().pretty_cause().to_string().is_empty());
+        fn no_cause() {
+            assert_eq!(
+                TestError::no_source().pretty_cause().to_string(),
+                "\n    TestError(0)."
+            );
         }
 
         #[test]
         fn single() {
-            const MESSAGE: &str = "\n\nCaused by: TestError(0).";
+            const MESSAGE: &str = indoc::indoc! {"
+
+                    TestError(1).
+
+                Caused by: TestError(0)."
+            };
 
             assert_eq!(TestError::nested(1).pretty_cause().to_string(), MESSAGE);
         }
@@ -518,7 +540,10 @@ mod pretty_cause {
         #[test]
         fn multiple() {
             const MESSAGE: &str = indoc::indoc! {"
-                \n\nCaused by:
+
+                    TestError(3).
+
+                Caused by:
                     0: TestError(2).
                     1: TestError(1).
                     2: TestError(0)."
@@ -529,10 +554,17 @@ mod pretty_cause {
 
         #[test]
         fn overload() {
-            let message = TestError::nested(OVERLOAD + 5).pretty_cause().to_string();
+            let message = TestError::nested(OVERLOAD.saturating_add(5))
+                .pretty_cause()
+                .to_string();
             let mut expected_message = String::with_capacity(message.len());
 
-            expected_message.push_str("\n\nCaused by:");
+            expected_message.push_str(indoc::indoc! {"
+
+                    TestError(10004).
+
+                Caused by:"
+            });
 
             for number in 0..=OVERLOAD {
                 write!(
@@ -547,7 +579,8 @@ mod pretty_cause {
             }
 
             expected_message.push_str(indoc::indoc! {"
-                \n>9999: TestError(3).
+
+                >9999: TestError(3).
                 >9999: TestError(2).
                 >9999: TestError(1).
                 >9999: TestError(0)."
@@ -563,7 +596,7 @@ mod pretty_cause {
         }
 
         impl TestError {
-            fn empty() -> Self {
+            fn no_source() -> Self {
                 Self {
                     source: None,
                     number: 0,
@@ -571,7 +604,7 @@ mod pretty_cause {
             }
 
             fn nested(nest: u16) -> Self {
-                let mut e = Self::empty();
+                let mut e = Self::no_source();
 
                 for _ in 0..nest {
                     e = Self {

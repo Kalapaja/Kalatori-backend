@@ -12,7 +12,7 @@
 use crate::{
     definitions::Entropy,
     error::{Error, SignerError},
-    task_tracker::TaskTracker,
+    utils::task_tracker::TaskTracker,
 };
 
 use mnemonic_external::{regular::InternalWordList, WordSet};
@@ -71,7 +71,7 @@ impl Signer {
                     }
                 }
             }
-            Ok("Signer module cleared and is shutting down!".into())
+            Ok("Signer module cleared and is shutting down!")
         });
 
         Ok(Self { tx })

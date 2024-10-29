@@ -1,4 +1,4 @@
-name:                         Rust test
+name: Kalatori Tests
 
 on:
   pull_request:
@@ -9,36 +9,73 @@ on:
 
 jobs:
   check:
-    name:                     Cargo test
-    runs-on:                  ubuntu-latest
+    name: Cargo and TypeScript Tests
+    runs-on: ubuntu-latest
     steps:
 
-      - name:                 Cancel Previous Runs
-        uses:                 styfle/cancel-workflow-action@0.12.1
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
         with:
-          access_token:       ${{ github.token }}
+          access_token: ${{ github.token }}
 
-      - name:                 Checkout sources
-        uses:                 actions/checkout@v4.2.0
+      - name: Checkout sources
+        uses: actions/checkout@v4.2.0
         with:
-          fetch-depth:        50
-          submodules:         'recursive'
+          fetch-depth: 50
+          submodules: recursive
 
-      - name:                 Install Rust stable toolchain
-        uses:                 actions-rs/toolchain@v1.0.7
+      - name: Initialize Git Submodules
+        run: git submodule update --init --recursive
+
+      - name: Verify directory structure
+        run: ls -R
+
+      - name: Install Rust stable toolchain
+        uses: actions-rs/toolchain@v1.0.7
         with:
-          profile:            minimal
-          toolchain:          stable
-          override:           true
+          profile: minimal
+          toolchain: stable
+          override: true
 
-      - name:                 Install cargo-nextest
-        uses:                 baptiste0928/cargo-install@v3
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v3
         with:
-          crate:              cargo-nextest
-          version:            0.9
+          crate: cargo-nextest
+          version: 0.9
 
-      - name:                 Rust Cache
-        uses:                 Swatinem/rust-cache@v2.7.3
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.5
 
-      - name:                 cargo nextest
-        run:                  cargo nextest run
+      - name: Run Rust app in background with environment variables
+        run: |
+          export KALATORI_HOST="127.0.0.1:16726"
+          export KALATORI_SEED="bottom drive obey lake curtain smoke basket hold race lonely fit walk"
+          export KALATORI_RECIPIENT="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          export KALATORI_REMARK="test"
+          cargo build
+          nohup cargo r &
+
+      - name: Wait for Rust app to start
+        run: sleep 120
+        # Wait for the Rust app to start and then wait for the app to connect to RPC
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Yarn package manager
+        run: npm install --global yarn
+
+      - name: Install dependencies
+        working-directory: ./tests/kalatori-api-test-suite
+        run: yarn install --network-timeout 100000
+
+      - name: Run tests
+        working-directory: ./tests/kalatori-api-test-suite
+        env:
+          DAEMON_HOST: 'http://127.0.0.1:16726'
+        run: yarn test
+
+#      - name: Run Rust tests
+#        run: cargo nextest run
