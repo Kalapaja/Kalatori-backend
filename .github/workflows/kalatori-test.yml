@@ -60,7 +60,7 @@ jobs:
         # Wait for the Rust app to start and then wait for the app to connect to RPC
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
