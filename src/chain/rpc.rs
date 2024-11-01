@@ -102,38 +102,36 @@ pub async fn get_keys_from_storage(
         const_hex::encode(twox_128(storage_name.as_bytes()))
     );
 
-    let count = 10; // TODO make full scan just in case
-    let mut start_key: Option<String> = None; // Start from the beginning
+    let count = 10;
+    // Because RPC API accepts parameters as a sequence and the last 2 parameters are
+    // `start_key: Option<StorageKey>` and `hash: Option<Hash>`, API *always* takes `hash` as
+    // `storage_key` if the latter is `None` and believes that `hash` is `None` because although
+    // `StorageKey` and `Hash` are different types, any `Hash` perfectly deserializes as
+    // `StorageKey`. Therefore, `start_key` must always be present to correctly use the
+    // `state_getKeysPaged` call with the `hash` parameter.
+    let mut start_key: String = "0x".into(); // Start from the beginning
 
     let params_template = vec![
         serde_json::to_value(storage_key_prefix.clone()).unwrap(),
         serde_json::to_value(count).unwrap(),
     ];
 
-    for i in 0..MAX_KEY_PAGES {
+    for _ in 0..MAX_KEY_PAGES {
         let mut params = params_template.clone();
-        if let Some(ref start_key) = start_key {
-            params.push(serde_json::to_value(start_key.clone()).unwrap());
-        }
+        params.push(serde_json::to_value(start_key.clone()).unwrap());
 
         params.push(serde_json::to_value(block.to_string()).unwrap());
         if let Ok(keys) = client.request("state_getKeysPaged", params).await {
-            if let Value::Array(ref keys_inside) = keys {
-                if keys_inside.len() == 0 {
-                    return Ok(keys_vec);
-                }
-                if let Some(last) = keys_inside.last() {
-                    if let Value::String(key_string) = last {
-                        start_key = Some(key_string.clone())
-                    } else {
-                        return Ok(keys_vec);
-                    }
+            if let Value::Array(keys_inside) = &keys {
+                if let Some(Value::String(key_string)) = keys_inside.last() {
+                    start_key.clone_from(key_string);
                 } else {
                     return Ok(keys_vec);
                 }
             } else {
                 return Ok(keys_vec);
             };
+
             keys_vec.push(keys);
         } else {
             return Ok(keys_vec);
@@ -262,6 +260,7 @@ pub struct BlockHead {
 }
 
 /// Get all sufficient assets from a chain
+#[expect(clippy::too_many_lines)]
 pub async fn assets_set_at_block(
     client: &WsClient,
     block: &BlockHash,
@@ -272,18 +271,6 @@ pub async fn assets_set_at_block(
     let mut assets_set = HashMap::new();
     let chain_name =
         <RuntimeMetadataV15 as AsMetadata<()>>::spec_name_version(metadata_v15)?.spec_name;
-    assets_set.insert(
-        specs.unit,
-        CurrencyProperties {
-            chain_name: chain_name.clone(),
-            kind: TokenKind::Native,
-            decimals: specs.decimals,
-            rpc_url: rpc_url.to_owned(),
-            asset_id: None,
-            ss58: specs.base58prefix,
-        },
-    );
-
     let mut assets_asset_storage_metadata = None;
     let mut assets_metadata_storage_metadata = None;
 

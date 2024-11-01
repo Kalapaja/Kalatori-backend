@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.6] - 2024-11-01
+
+### 🐛 Bug Fixes
+
+- Fixed the storage fetching.
+- Removed redundant name checks & thereby fixed the connection to Asset Hub chains.
+
 ## [0.2.5] - 2024-10-29
 
 ### 🚀 Features
