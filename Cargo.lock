@@ -2652,20 +2652,6 @@ dependencies = [
 
 [[package]]
 name = "sp-arithmetic"
-version = "25.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "910c07fa263b20bf7271fdd4adcb5d3217dfdac14270592e0780223542e7e114"
-dependencies = [
- "integer-sqrt",
- "num-traits",
- "parity-scale-codec",
- "scale-info",
- "sp-std",
- "static_assertions",
-]
-
-[[package]]
-name = "sp-arithmetic"
 version = "26.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46d0d0a4c591c421d3231ddd5e27d828618c24456d51445d21a1f79fcee97c23"
@@ -2730,7 +2716,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "substrate-constructor"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-constructor#93a818cfaa2b8501c309e2d273b73757e9b198ab"
+source = "git+https://github.com/Alzymologist/substrate-constructor#540559207e640bfa158358cdbf736eb488c57100"
 dependencies = [
  "bitvec",
  "external-memory-tools",
@@ -2740,7 +2726,7 @@ dependencies = [
  "parity-scale-codec",
  "primitive-types",
  "scale-info",
- "sp-arithmetic 25.0.0",
+ "sp-arithmetic",
  "sp-crypto-hashing",
  "substrate-crypto-light",
  "substrate_parser",
@@ -2781,7 +2767,7 @@ dependencies = [
  "plot_icon",
  "primitive-types",
  "scale-info",
- "sp-arithmetic 26.0.0",
+ "sp-arithmetic",
  "sp-crypto-hashing",
  "substrate-crypto-light",
 ]
@@ -3418,7 +3404,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
