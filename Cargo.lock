@@ -913,6 +913,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "frame-metadata"
+version = "17.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "701bac17e9b55e0f95067c428ebcb46496587f08e8cf4ccc0fe5903bea10dbb8"
+dependencies = [
+ "cfg-if",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "fs2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1481,7 +1493,7 @@ dependencies = [
  "axum-macros",
  "clap",
  "const-hex",
- "frame-metadata",
+ "frame-metadata 17.0.0",
  "indoc",
  "jsonrpsee",
  "mnemonic-external",
@@ -2720,7 +2732,7 @@ source = "git+https://github.com/Alzymologist/substrate-constructor#540559207e64
 dependencies = [
  "bitvec",
  "external-memory-tools",
- "frame-metadata",
+ "frame-metadata 16.0.0",
  "hex",
  "num-bigint",
  "parity-scale-codec",
@@ -2760,7 +2772,7 @@ source = "git+https://github.com/Alzymologist/substrate-parser#09f98462f5179bf3c
 dependencies = [
  "bitvec",
  "external-memory-tools",
- "frame-metadata",
+ "frame-metadata 16.0.0",
  "hex",
  "num-bigint",
  "parity-scale-codec",
