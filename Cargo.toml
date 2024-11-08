@@ -29,7 +29,7 @@ scale-info = "2"
 axum-macros = "0.4"
 primitive-types = { version = "0.12", features = ["codec"] }
 jsonrpsee = { version = "0.24", features = ["ws-client"] }
-thiserror = "1"
+thiserror = "2"
 frame-metadata = "16"
 const-hex = "1"
 codec = { package = "parity-scale-codec", version = "3", features = [
