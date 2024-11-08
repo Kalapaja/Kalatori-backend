@@ -2716,7 +2716,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "substrate-constructor"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-constructor#540559207e640bfa158358cdbf736eb488c57100"
+source = "git+https://github.com/Alzymologist/substrate-constructor#b18997ccd2dccc5b53b39cfaed8b8591de1ee904"
 dependencies = [
  "bitvec",
  "external-memory-tools",
@@ -2736,7 +2736,7 @@ dependencies = [
 [[package]]
 name = "substrate-crypto-light"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-crypto-light#8b5d43144a622f4fdbd8f4147a302e6ff4af894c"
+source = "git+https://github.com/Alzymologist/substrate-crypto-light#e1c07e19ccb19862accc2771d3b7ec0f86c80a36"
 dependencies = [
  "base58",
  "blake2b_simd",
@@ -2756,7 +2756,7 @@ dependencies = [
 [[package]]
 name = "substrate_parser"
 version = "0.6.1"
-source = "git+https://github.com/Alzymologist/substrate-parser#09f98462f5179bf3c5b6c323c53f7438caf03f06"
+source = "git+https://github.com/Alzymologist/substrate-parser#12dd47d784339020b3a0c8ebcb09cc7399b7861c"
 dependencies = [
  "bitvec",
  "external-memory-tools",
@@ -3404,7 +3404,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
