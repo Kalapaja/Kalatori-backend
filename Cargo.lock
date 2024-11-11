@@ -2736,7 +2736,7 @@ dependencies = [
 [[package]]
 name = "substrate-crypto-light"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-crypto-light#8b5d43144a622f4fdbd8f4147a302e6ff4af894c"
+source = "git+https://github.com/Alzymologist/substrate-crypto-light#e1c07e19ccb19862accc2771d3b7ec0f86c80a36"
 dependencies = [
  "base58",
  "blake2b_simd",
