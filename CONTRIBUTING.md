@@ -1,12 +1,29 @@
 ## Preparing development environment
 
 It's possible to mimic to spawn chopsticks instances in parallel for development purposes. 
-Chopsticks Dockerfile exposes 4 ports (8000, 8500, 9000, 9500), so you can spawn 4 instances of chopsticks and each one of them will look at different RPC.
+Chopsticks Dockerfile exposes 4 ports (8000, 8500, 9000, 9500), so you can spawn up to 4 instances of chopsticks and each one of them will look at different RPC (note that those will be different chains).
 Note that the RPCs are not real, so the changes made on one chopsticks instance will not affect the others.
 
 1. `cd chopsticks`
 2. `docker compose up`, in case you want to just 2 instances edit the docker-compose.yml file
 3. start the app with `KALATORI_CONFIG` environment variable pointing to `configs/chopsticks.toml`
+
+## Running tests locally
+
+While having the kalatori app running. You can run the tests locally by running the following command:
+
+```bash
+cd tests/kalatori-api-test-suite
+yarn
+yarn test
+```
+
+You can run specific test similarly to the following command:
+
+```bash
+cd tests/kalatori-api-test-suite
+yarn test -t "should create, repay, and automatically withdraw an order in USDC"
+```
 
 ## Version Bumping and Release Process
 
