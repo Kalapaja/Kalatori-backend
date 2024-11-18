@@ -913,6 +913,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "frame-metadata"
+version = "17.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "701bac17e9b55e0f95067c428ebcb46496587f08e8cf4ccc0fe5903bea10dbb8"
+dependencies = [
+ "cfg-if",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "fs2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1283,6 +1295,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "impl-codec"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67aa010c1e3da95bf151bd8b4c059b2ed7e75387cdb969b4f8f2723a43f9941"
+dependencies = [
+ "parity-scale-codec",
+]
+
+[[package]]
 name = "impl-trait-for-tuples"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1481,13 +1502,13 @@ dependencies = [
  "axum-macros",
  "clap",
  "const-hex",
- "frame-metadata",
+ "frame-metadata 16.0.0",
  "indoc",
  "jsonrpsee",
  "mnemonic-external",
  "names",
  "parity-scale-codec",
- "primitive-types",
+ "primitive-types 0.12.2",
  "reqwest",
  "scale-info",
  "serde",
@@ -1980,8 +2001,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
 dependencies = [
  "fixed-hash",
- "impl-codec",
- "uint",
+ "impl-codec 0.6.0",
+ "uint 0.9.5",
+]
+
+[[package]]
+name = "primitive-types"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
+dependencies = [
+ "fixed-hash",
+ "impl-codec 0.7.0",
+ "uint 0.10.0",
 ]
 
 [[package]]
@@ -2720,11 +2752,11 @@ source = "git+https://github.com/Alzymologist/substrate-constructor#540559207e64
 dependencies = [
  "bitvec",
  "external-memory-tools",
- "frame-metadata",
+ "frame-metadata 16.0.0",
  "hex",
  "num-bigint",
  "parity-scale-codec",
- "primitive-types",
+ "primitive-types 0.12.2",
  "scale-info",
  "sp-arithmetic",
  "sp-crypto-hashing",
@@ -2736,7 +2768,7 @@ dependencies = [
 [[package]]
 name = "substrate-crypto-light"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-crypto-light#8b5d43144a622f4fdbd8f4147a302e6ff4af894c"
+source = "git+https://github.com/Alzymologist/substrate-crypto-light#e1c07e19ccb19862accc2771d3b7ec0f86c80a36"
 dependencies = [
  "base58",
  "blake2b_simd",
@@ -2756,16 +2788,16 @@ dependencies = [
 [[package]]
 name = "substrate_parser"
 version = "0.6.1"
-source = "git+https://github.com/Alzymologist/substrate-parser#09f98462f5179bf3c5b6c323c53f7438caf03f06"
+source = "git+https://github.com/Alzymologist/substrate-parser#ed388d969b803b4713622378bb716b2032b2c7fe"
 dependencies = [
  "bitvec",
  "external-memory-tools",
- "frame-metadata",
+ "frame-metadata 17.0.0",
  "hex",
  "num-bigint",
  "parity-scale-codec",
  "plot_icon",
- "primitive-types",
+ "primitive-types 0.13.1",
  "scale-info",
  "sp-arithmetic",
  "sp-crypto-hashing",
@@ -3198,6 +3230,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "uint"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "909988d098b2f738727b161a106cfc7cab00c539c2687a8836f8e565976fb53e"
+dependencies = [
+ "byteorder",
+ "crunchy",
+ "hex",
+ "static_assertions",
+]
+
+[[package]]
 name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3404,7 +3448,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
