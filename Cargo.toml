@@ -30,7 +30,7 @@ axum-macros = "0.4"
 primitive-types = { version = "0.13", features = ["codec"] }
 jsonrpsee = { version = "0.24", features = ["ws-client"] }
 thiserror = "1"
-frame-metadata = "17"
+frame-metadata = "18"
 const-hex = "1"
 codec = { package = "parity-scale-codec", version = "3", features = [
     "chain-error",
