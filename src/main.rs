@@ -147,7 +147,7 @@ async fn async_try_main(
         instance_id,
         task_tracker.clone(),
         shutdown_notification.token.clone(),
-    )?;
+    );
 
     cm_tx
         .send(ChainManager::ignite(

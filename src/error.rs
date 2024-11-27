@@ -6,7 +6,7 @@ use crate::{
 use codec::Error as ScaleError;
 use frame_metadata::v15::RuntimeMetadataV15;
 use jsonrpsee::core::ClientError;
-use mnemonic_external::error::ErrorWordList;
+use mnemonic_external::error::ErrorMnemonic;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 use sled::Error as DatabaseError;
@@ -316,6 +316,15 @@ pub enum ChainError {
 
     #[error("failed to parse JSON data from a block stream")]
     Serde(#[from] JsonError),
+
+    #[error("failed to send a constructed transaction back to the state")]
+    TransactionNotSaved,
+
+    #[error("timestamp wasn't found in the block")]
+    TimestampNotFoundForBlock,
+
+    #[error("transfer event has no matching extrinsic")]
+    TransferEventNoExtrinsic,
 }
 
 #[derive(Debug, Error)]
@@ -417,7 +426,7 @@ pub enum SignerError {
     SignerDown,
 
     #[error("seed phrase is invalid")]
-    InvalidSeed(#[from] ErrorWordList),
+    InvalidSeed(#[from] ErrorMnemonic),
 
     #[error("derivation was failed")]
     InvalidDerivation(String),
@@ -427,6 +436,9 @@ pub enum SignerError {
 pub enum NotHexError {
     #[error("block hash string isn't a valid hexadecimal")]
     BlockHash,
+
+    #[error("encoded extrinsic string isn't a valid hexadecimal")]
+    Extrinsic,
 
     #[error("encoded metadata string isn't a valid hexadecimal")]
     Metadata,

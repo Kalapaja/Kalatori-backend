@@ -8,9 +8,8 @@ use crate::{
             system_balance_query, system_properties_to_short_specs,
         },
     },
-    definitions::api_v2::CurrencyProperties,
     definitions::{
-        api_v2::{AssetId, TokenKind},
+        api_v2::{AssetId, BlockNumber, CurrencyProperties, ExtrinsicIndex, Timestamp, TokenKind},
         Balance,
     },
     error::{ChainError, NotHexError},
@@ -25,16 +24,20 @@ use hashing::twox_128;
 use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
+use primitive_types::U256;
 use scale_info::{form::PortableForm, PortableRegistry, TypeDef, TypeDefPrimitive};
-use serde::Deserialize;
+use serde::{de, Deserialize, Deserializer};
 use serde_json::{Number, Value};
 use std::{collections::HashMap, fmt::Debug};
 use substrate_crypto_light::common::AccountId32;
 use substrate_parser::{
-    cards::{Event, ParsedData, Sequence},
+    cards::{
+        Call, Event, ExtendedData, FieldData, PalletSpecificData, ParsedData, Sequence, VariantData,
+    },
     decode_all_as_type, decode_as_storage_entry,
     special_indicators::SpecialtyUnsignedInteger,
     storage_data::{KeyData, KeyPart},
+    unchecked_extrinsic::UncheckedExtrinsic,
     AsMetadata, ResolveType, ShortSpecs,
 };
 
@@ -123,10 +126,6 @@ pub async fn get_keys_from_storage(
         params.push(serde_json::to_value(block.to_string()).unwrap());
         if let Ok(keys) = client.request("state_getKeysPaged", params).await {
             if let Value::Array(keys_inside) = &keys {
-                if keys_inside.is_empty() {
-                    return Ok(keys_vec);
-                }
-
                 if let Some(Value::String(key_string)) = keys_inside.last() {
                     start_key.clone_from(key_string);
                 } else {
@@ -165,7 +164,7 @@ pub async fn genesis_hash(client: &WsClient) -> Result<BlockHash, ChainError> {
 /// the same block
 pub async fn block_hash(
     client: &WsClient,
-    number: Option<String>,
+    number: Option<BlockNumber>,
 ) -> Result<BlockHash, ChainError> {
     let rpc_params = if let Some(a) = number {
         rpc_params![a]
@@ -238,7 +237,9 @@ pub async fn specs(
     }
 }
 
-pub async fn next_block_number(blocks: &mut Subscription<BlockHead>) -> Result<String, ChainError> {
+pub async fn next_block_number(
+    blocks: &mut Subscription<BlockHead>,
+) -> Result<BlockNumber, ChainError> {
     match blocks.next().await {
         Some(Ok(a)) => Ok(a.number),
         Some(Err(e)) => Err(e.into()),
@@ -258,9 +259,32 @@ pub async fn next_block(
 pub struct BlockHead {
     //digest: Value,
     //extrinsics_root: String,
-    pub number: String,
+    #[serde(deserialize_with = "deserialize_block_number")]
+    pub number: BlockNumber,
     //parent_hash: String,
     //state_root: String,
+}
+
+fn deserialize_block_number<'d, D: Deserializer<'d>>(d: D) -> Result<BlockNumber, D::Error> {
+    let n = U256::deserialize(d)?;
+
+    n.try_into()
+        .map_err(|_| de::Error::custom("failed to convert `U256` to a block number"))
+}
+
+#[derive(Deserialize)]
+pub struct BlockDetails {
+    block: Block,
+}
+
+#[derive(Deserialize)]
+pub struct Block {
+    pub block: BlockInner,
+}
+
+#[derive(Deserialize)]
+pub struct BlockInner {
+    pub extrinsics: Vec<String>,
 }
 
 /// Get all sufficient assets from a chain
@@ -621,11 +645,10 @@ pub async fn transfer_events(
     client: &WsClient,
     block: &BlockHash,
     metadata_v15: &RuntimeMetadataV15,
-) -> Result<Vec<Event>, ChainError> {
-    let events_entry_metadata = events_entry_metadata(&metadata_v15)?;
-
-    events_at_block(
-        &client,
+) -> Result<(Timestamp, Vec<(Option<(ExtrinsicIndex, Vec<u8>)>, Event)>), ChainError> {
+    let events_entry_metadata = events_entry_metadata(metadata_v15)?;
+    let events = events_at_block(
+        client,
         block,
         Some(EventFilter {
             pallet: BALANCES,
@@ -634,7 +657,97 @@ pub async fn transfer_events(
         events_entry_metadata,
         &metadata_v15.types,
     )
-    .await
+    .await?
+    .into_iter()
+    .chain(
+        events_at_block(
+            client,
+            block,
+            Some(EventFilter {
+                pallet: "Assets",
+                optional_event_variant: Some("Transferred"),
+            }),
+            events_entry_metadata,
+            &metadata_v15.types,
+        )
+        .await?
+        .into_iter(),
+    )
+    .collect();
+
+    match_extrinsics_with_events_at_block(events, client, block, metadata_v15).await
+}
+
+async fn match_extrinsics_with_events_at_block(
+    events: Vec<(Option<ExtrinsicIndex>, Event)>,
+    client: &WsClient,
+    block_hash: &BlockHash,
+    metadata_v15: &RuntimeMetadataV15,
+) -> Result<(Timestamp, Vec<(Option<(ExtrinsicIndex, Vec<u8>)>, Event)>), ChainError> {
+    let block: Block = client
+        .request("chain_getBlock", rpc_params!(block_hash.to_string()))
+        .await?;
+    let extrinsics = block
+        .block
+        .extrinsics
+        .into_iter()
+        .map(|encoded| unhex(&encoded, NotHexError::Extrinsic))
+        .collect::<Result<Vec<_>, _>>()?;
+    let timestamp = extrinsics
+        .iter()
+        .find_map(|encoded| {
+            if let UncheckedExtrinsic::Unsigned {
+                call:
+                    Call(PalletSpecificData {
+                        pallet_name,
+                        variant_name,
+                        fields,
+                        ..
+                    }),
+            } = substrate_parser::decode_as_unchecked_extrinsic(
+                &encoded.as_ref(),
+                &mut (),
+                metadata_v15,
+            )
+            .expect("RAM stored metadata access")
+            {
+                if pallet_name == "Timestamp" && variant_name == "set" {
+                    if let Some(FieldData {
+                        data:
+                            ExtendedData {
+                                data: ParsedData::PrimitiveU64 { value, .. },
+                                ..
+                            },
+                        ..
+                    }) = fields.into_iter().next()
+                    {
+                        return Some(Timestamp(value));
+                    }
+                }
+            }
+
+            None
+        })
+        .ok_or(ChainError::TimestampNotFoundForBlock)?;
+
+    Ok((
+        timestamp,
+        events
+            .into_iter()
+            .map(|(extrinsic, event)| {
+                let extrinsic_option = extrinsic.and_then(|index| {
+                    let index_usize = index.try_into().unwrap();
+
+                    extrinsics
+                        .get::<usize>(index_usize)
+                        .cloned()
+                        .map(|bytes| (index, bytes))
+                });
+
+                (extrinsic_option, event)
+            })
+            .collect(),
+    ))
 }
 
 async fn events_at_block(
@@ -643,71 +756,87 @@ async fn events_at_block(
     optional_filter: Option<EventFilter<'_>>,
     events_entry_metadata: &StorageEntryMetadata<PortableForm>,
     types: &PortableRegistry,
-) -> Result<Vec<Event>, ChainError> {
-    let keys_from_storage_vec = get_keys_from_storage(client, "System", "Events", block).await?;
+) -> Result<Vec<(Option<ExtrinsicIndex>, Event)>, ChainError> {
+    let key = format!(
+        "0x{}{}",
+        const_hex::encode(twox_128("System".as_bytes())),
+        const_hex::encode(twox_128("Events".as_bytes()))
+    );
     let mut out = Vec::new();
-    for keys_from_storage in keys_from_storage_vec {
-        match keys_from_storage {
-            Value::Array(ref keys_array) => {
-                for key in keys_array {
-                    if let Value::String(key) = key {
-                        let data_from_storage = get_value_from_storage(client, &key, block).await?;
-                        let key_bytes = unhex(&key, NotHexError::StorageValue)?;
-                        let value_bytes =
-                            if let Value::String(data_from_storage) = data_from_storage {
-                                unhex(&data_from_storage, NotHexError::StorageValue)?
-                            } else {
-                                return Err(ChainError::StorageValueFormat(data_from_storage));
-                            };
-                        let storage_data =
-                            decode_as_storage_entry::<&[u8], (), RuntimeMetadataV15>(
-                                &key_bytes.as_ref(),
-                                &value_bytes.as_ref(),
-                                &mut (),
-                                events_entry_metadata,
-                                types,
-                            )
-                            .expect("RAM stored metadata access");
-                        if let ParsedData::SequenceRaw(sequence_raw) = storage_data.value.data {
-                            for sequence_element in sequence_raw.data {
-                                if let ParsedData::Composite(event_record) = sequence_element {
-                                    for event_record_element in event_record {
-                                        if event_record_element.field_name
-                                            == Some("event".to_string())
+    let data_from_storage = get_value_from_storage(client, &key, block).await?;
+    let key_bytes = unhex(&key, NotHexError::StorageValue)?;
+    let value_bytes = if let Value::String(data_from_storage) = data_from_storage {
+        unhex(&data_from_storage, NotHexError::StorageValue)?
+    } else {
+        return Err(ChainError::StorageValueFormat(data_from_storage));
+    };
+    let storage_data = decode_as_storage_entry::<&[u8], (), RuntimeMetadataV15>(
+        &key_bytes.as_ref(),
+        &value_bytes.as_ref(),
+        &mut (),
+        events_entry_metadata,
+        types,
+    )
+    .expect("RAM stored metadata access");
+    if let ParsedData::SequenceRaw(sequence_raw) = storage_data.value.data {
+        for sequence_element in sequence_raw.data {
+            let (mut extrinsic_index, mut event_option) = (None, None);
+
+            if let ParsedData::Composite(event_record) = sequence_element {
+                for event_record_element in event_record {
+                    match event_record_element.field_name.as_deref() {
+                        Some("event") => {
+                            if let ParsedData::Event(Event(event)) = event_record_element.data.data
+                            {
+                                if let Some(filter) = &optional_filter {
+                                    if let Some(event_variant) = filter.optional_event_variant {
+                                        if event.pallet_name == filter.pallet
+                                            && event.variant_name == event_variant
                                         {
-                                            if let ParsedData::Event(Event(ref event)) =
-                                                event_record_element.data.data
-                                            {
-                                                if let Some(ref filter) = optional_filter {
-                                                    if let Some(event_variant) =
-                                                        filter.optional_event_variant
-                                                    {
-                                                        if event.pallet_name == filter.pallet
-                                                            && event.variant_name == event_variant
-                                                        {
-                                                            out.push(Event(event.to_owned()));
-                                                        }
-                                                    } else if event.pallet_name == filter.pallet {
-                                                        out.push(Event(event.to_owned()));
-                                                    }
-                                                } else {
-                                                    out.push(Event(event.to_owned()));
-                                                }
-                                            }
+                                            event_option = Some(Event(event));
                                         }
+                                    } else if event.pallet_name == filter.pallet {
+                                        event_option = Some(Event(event));
+                                    }
+                                } else {
+                                    event_option = Some(Event(event));
+                                }
+                            }
+                        }
+                        Some("phase") => {
+                            if let ParsedData::Variant(VariantData {
+                                variant_name,
+                                fields,
+                                ..
+                            }) = event_record_element.data.data
+                            {
+                                if variant_name == "ApplyExtrinsic" {
+                                    if let Some(FieldData {
+                                        data:
+                                            ExtendedData {
+                                                data: ParsedData::PrimitiveU32 { value, .. },
+                                                ..
+                                            },
+                                        ..
+                                    }) = fields.into_iter().next()
+                                    {
+                                        extrinsic_index = Some(value);
                                     }
                                 }
                             }
                         }
+                        _ => {}
                     }
                 }
             }
-            _ => {
-                tracing::warn!("{keys_from_storage}");
+
+            if let Some(event_some) = event_option {
+                out.push((extrinsic_index, event_some));
             }
         }
     }
-    return Ok(out);
+
+    Ok(out)
 }
 
 pub async fn current_block_number(

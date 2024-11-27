@@ -85,7 +85,7 @@ pub mod api_v2 {
     pub const CURRENCY: &str = "currency";
     pub type AssetId = u32;
     pub type Decimals = u8;
-    pub type BlockNumber = u64;
+    pub type BlockNumber = u32;
     pub type ExtrinsicIndex = u32;
 
     #[derive(Encode, Decode, Debug, Clone, Copy, Serialize, Deserialize)]
@@ -279,25 +279,25 @@ pub mod api_v2 {
     #[derive(Clone, Debug, Serialize, Decode, Encode)]
     pub struct TransactionInfo {
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        finalized_tx: Option<FinalizedTx>, // Clearly undefined in v2.1 - TODO
-        transaction_bytes: String,
-        sender: String,
-        recipient: String,
+        pub finalized_tx: Option<FinalizedTx>, // Clearly undefined in v2.1 - TODO
+        pub transaction_bytes: String,
+        pub sender: String,
+        pub recipient: String,
         #[serde(serialize_with = "amount_serializer")]
-        amount: Amount,
-        currency: CurrencyInfo,
-        status: TxStatus,
+        pub amount: Amount,
+        pub currency: CurrencyInfo,
+        pub status: TxStatus,
     }
 
     #[derive(Clone, Debug, Serialize, Decode, Encode)]
-    struct FinalizedTx {
-        block_number: BlockNumber,
-        position_in_block: ExtrinsicIndex,
-        timestamp: String,
+    pub struct FinalizedTx {
+        pub block_number: BlockNumber,
+        pub position_in_block: ExtrinsicIndex,
+        pub timestamp: String,
     }
 
     #[derive(Clone, Debug, Decode, Encode)]
-    enum Amount {
+    pub enum Amount {
         All,
         Exact(f64),
     }
@@ -311,7 +311,7 @@ pub mod api_v2 {
 
     #[derive(Clone, Debug, Serialize, Decode, Encode)]
     #[serde(rename_all = "lowercase")]
-    enum TxStatus {
+    pub enum TxStatus {
         Pending,
         Finalized,
         Failed,

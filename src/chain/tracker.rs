@@ -1,17 +1,5 @@
 //! A tracker that follows individual chain
 
-use frame_metadata::v15::RuntimeMetadataV15;
-use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use serde_json::Value;
-use std::{collections::HashMap, time::SystemTime};
-use substrate_parser::{AsMetadata, ShortSpecs};
-use tokio::{
-    sync::mpsc,
-    time::{timeout, Duration},
-};
-use tokio_util::sync::CancellationToken;
-
-use crate::definitions::api_v2::{Health, RpcInfo, TokenKind};
 use crate::{
     chain::{
         definitions::{BlockHash, ChainTrackerRequest, Invoice},
@@ -20,14 +8,33 @@ use crate::{
             assets_set_at_block, block_hash, genesis_hash, metadata, next_block, next_block_number,
             runtime_version_identifier, specs, subscribe_blocks, transfer_events,
         },
-        utils::was_balance_received_at_account,
+        utils::parse_transfer_event,
     },
-    definitions::{api_v2::CurrencyProperties, Chain},
-    error::ChainError,
+    database::{FinalizedTxDb, TransactionInfoDb, TransactionInfoDbInner, TxKind},
+    definitions::{
+        api_v2::{Amount, CurrencyProperties, Health, RpcInfo, TokenKind, TxStatus},
+        Chain,
+    },
+    error::{ChainError, Error},
     signer::Signer,
     state::State,
     utils::task_tracker::TaskTracker,
 };
+use frame_metadata::v15::RuntimeMetadataV15;
+use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+use serde_json::Value;
+use std::{
+    collections::{HashMap, HashSet},
+    time::SystemTime,
+};
+use substrate_crypto_light::common::AsBase58;
+use substrate_parser::{AsMetadata, ShortSpecs};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use tokio::{
+    sync::mpsc,
+    time::{timeout, Duration},
+};
+use tokio_util::sync::CancellationToken;
 
 #[allow(clippy::too_many_lines)]
 pub fn start_chain_watch(
@@ -95,9 +102,9 @@ pub fn start_chain_watch(
                         timeout(Duration::from_millis(watchdog), chain_rx.recv()).await
                     {
                         match request {
-                            ChainTrackerRequest::NewBlock(block) => {
+                            ChainTrackerRequest::NewBlock(block_number) => {
                                 // TODO: hide this under rpc module
-                                let block = match block_hash(&client, Some(block)).await {
+                                let block = match block_hash(&client, Some(block_number)).await {
                                     Ok(a) => a,
                                     Err(e) => {
                                         tracing::info!(
@@ -116,8 +123,83 @@ pub fn start_chain_watch(
                                     break;
                                 }
 
-                                let mut id_remove_list = Vec::new();
+                                tracing::debug!("Watched accounts: {watched_accounts:?}");
+
                                 let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+
+                                let mut id_remove_list = Vec::new();
+
+                                match transfer_events(
+                                    &client,
+                                    &block,
+                                    &watcher.metadata,
+                                )
+                                    .await {
+                                        Ok((timestamp, events)) => {
+                                        tracing::debug!("Got a block with timestamp {timestamp:?} & events: {events:?}");
+
+                                        for (id, invoice) in &watched_accounts {
+                                            for (extrinsic_option, event) in &events {
+                                                if let Some((tx_kind, another_account, transfer_amount)) = parse_transfer_event(&invoice.address, &event.0.fields) {
+                                                    tracing::debug!("Found {tx_kind:?} from/to {another_account:?} with {transfer_amount:?} token(s).");
+
+                                                    let Some((position_in_block, extrinsic)) = extrinsic_option else {
+                                                        return Err(Error::from(ChainError::TransferEventNoExtrinsic));
+                                                    };
+
+                                                    let finalized_tx_timestamp = (OffsetDateTime::UNIX_EPOCH + Duration::from_millis(timestamp.0))
+                                                        .format(&Rfc3339).unwrap().into();
+                                                    let finalized_tx = FinalizedTxDb {
+                                                            block_number,
+                                                            position_in_block: *position_in_block
+                                                        }.into();
+                                                    let amount = Amount::Exact(transfer_amount.format(invoice.currency.decimals));
+                                                    let status = TxStatus::Finalized;
+                                                    let currency = invoice.currency.clone();
+                                                    let transaction_bytes = const_hex::encode_prefixed(extrinsic);
+
+                                                    match tx_kind {
+                                                        kind @ TxKind::Payment => {
+                                                            state.record_transaction(
+                                                                TransactionInfoDb {
+                                                                    transaction_bytes,
+                                                                    inner: TransactionInfoDbInner {
+                                                                        finalized_tx,
+                                                                        finalized_tx_timestamp,
+                                                                        sender: another_account.to_base58_string(42),
+                                                                        recipient: invoice.address.to_base58_string(42),
+                                                                        amount,
+                                                                        currency,
+                                                                        status,
+                                                                        kind,
+                                                                    } },
+                                                                    id.clone()).await?;
+                                                        }
+                                                        kind @ TxKind::Withdrawal => {
+                                                            state.record_transaction(
+                                                                TransactionInfoDb {
+                                                                    transaction_bytes,
+                                                                    inner: TransactionInfoDbInner {
+                                                                        finalized_tx,
+                                                                        finalized_tx_timestamp,
+                                                                        sender: invoice.address.to_base58_string(42),
+                                                                        recipient: another_account.to_base58_string(42),
+                                                                        amount,
+                                                                        currency,
+                                                                        status,
+                                                                        kind,
+                                                                    } },
+                                                                    id.clone()).await?;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("events fetch error: {0:?}", e);
+                                    }
+                                }
 
                                 // Important! There used to be a significant oprimisation that
                                 // watched events and checked only accounts that have tranfers into
@@ -132,15 +214,35 @@ pub fn start_chain_watch(
                                     match invoice.check(&client, &watcher, &block).await {
                                         Ok(true) => {
                                             state.order_paid(id.clone()).await;
-                                            id_remove_list.push(id.to_owned());
-                                        },
-                                        Ok(false) => {
-                                            if invoice.death.0 <= now {
-                                                id_remove_list.push(id.to_owned());
-                                            }
                                         },
                                         Err(e) => {
                                             tracing::warn!("account fetch error: {0:?}", e);
+                                        }
+                                        _ => {}
+                                    }
+
+                                    if invoice.death.0 <= now {
+                                        match state.is_order_paid(id.clone()).await {
+                                            Ok(paid_db) => {
+                                                if !paid_db {
+                                                    match invoice.check(&client, &watcher, &block).await {
+                                                        Ok(paid) => {
+                                                            if paid {
+                                                                state.order_paid(id.clone()).await;
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!("account fetch error: {0:?}", e);
+                                                        }
+                                                    }
+                                                }
+
+                                                tracing::debug!("Removing an account {id:?} due to passing its death timestamp");
+                                                id_remove_list.push(id.to_owned());
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!("account read error: {e:?}");
+                                            }
                                         }
                                     }
                                 }
@@ -160,8 +262,9 @@ pub fn start_chain_watch(
                                 let reap_state_handle = state.interface();
                                 let watcher_for_reaper = watcher.clone();
                                 let signer_for_reaper = signer.interface();
+
                                 task_tracker.clone().spawn(format!("Initiate payout for order {}", id.clone()), async move {
-                                    payout(rpc, Invoice::from_request(request), reap_state_handle, watcher_for_reaper, signer_for_reaper).await;
+                                    drop(payout(rpc, Invoice::from_request(request), reap_state_handle, watcher_for_reaper, signer_for_reaper).await);
                                     Ok(format!("Payout attempt for order {id} terminated"))
                                 });
                             }
@@ -172,7 +275,7 @@ pub fn start_chain_watch(
                                 let watcher_for_reaper = watcher.clone();
                                 let signer_for_reaper = signer.interface();
                                 task_tracker.clone().spawn(format!("Initiate forced payout for order {}", id.clone()), async move {
-                                    payout(rpc, Invoice::from_request(request), reap_state_handle, watcher_for_reaper, signer_for_reaper).await;
+                                    drop(payout(rpc, Invoice::from_request(request), reap_state_handle, watcher_for_reaper, signer_for_reaper).await);
                                     Ok(format!("Forced payout attempt for order {id} terminated"))
                                 });
                             }
@@ -184,11 +287,11 @@ pub fn start_chain_watch(
                         }
                     }
                 } else {
-                    let _ = rpc_update_tx.send(RpcInfo {
+                    drop(rpc_update_tx.send(RpcInfo {
                         chain_name: chain.name.clone(),
                         rpc_url: endpoint.clone(),
                         status: Health::Critical,
-                    }).await;
+                    }).await);
                 }
             }
             Ok(format!("Chain {} monitor shut down", chain.name))
@@ -240,23 +343,23 @@ impl ChainWatcher {
             &chain.asset
         );
         // Remove unwanted assets
-        assets.retain(|asset_name, properties| {
-            tracing::info!(
-                "chain {} has token {} with properties {:?}",
-                &chain.name,
-                asset_name,
-                properties
-            );
+        assets = assets
+            .into_iter()
+            .filter_map(|(asset_name, properties)| {
+                tracing::info!(
+                    "chain {} has token {} with properties {:?}",
+                    &chain.name,
+                    &asset_name,
+                    &properties
+                );
 
-            if let Some(ref native_token) = chain.native_token {
-                (native_token.name == *asset_name) && (native_token.decimals == specs.decimals)
-            } else {
                 chain
                     .asset
                     .iter()
-                    .any(|a| a.name == *asset_name && Some(a.id) == properties.asset_id)
-            }
-        });
+                    .find(|a| Some(a.id) == properties.asset_id)
+                    .map(|a| (a.name.clone(), properties))
+            })
+            .collect();
 
         if let Some(ref native_token) = chain.native_token {
             if native_token.decimals == specs.decimals {

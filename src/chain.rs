@@ -101,7 +101,7 @@ impl ChainManager {
                         Some(request) = rx.recv() => {
                             match request {
                                 ChainRequest::WatchAccount(request) => {
-                                    if let Some(chain) = currency_map.get(&request.currency) {
+                                    if let Some(chain) = currency_map.get(&request.currency.currency) {
                                         if let Some(receiver) = watch_chain.get(chain) {
                                             let _unused = receiver
                                                 .send(ChainTrackerRequest::WatchAccount(request))
@@ -114,11 +114,11 @@ impl ChainManager {
                                     } else {
                                         let _unused = request
                                             .res
-                                            .send(Err(ChainError::InvalidCurrency(request.currency)));
+                                            .send(Err(ChainError::InvalidCurrency(request.currency.currency)));
                                     }
                                 }
                                 ChainRequest::Reap(request) => {
-                                    if let Some(chain) = currency_map.get(&request.currency) {
+                                    if let Some(chain) = currency_map.get(&request.currency.currency) {
                                         if let Some(receiver) = watch_chain.get(chain) {
                                             let _unused =
                                                 receiver.send(ChainTrackerRequest::Reap(request)).await;
@@ -130,7 +130,7 @@ impl ChainManager {
                                     } else {
                                         let _unused = request
                                             .res
-                                            .send(Err(ChainError::InvalidCurrency(request.currency)));
+                                            .send(Err(ChainError::InvalidCurrency(request.currency.currency)));
                                     }
                                 }
                                 ChainRequest::Shutdown(res) => {

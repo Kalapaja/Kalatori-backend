@@ -4,20 +4,21 @@
 //! commercial offers and contracts, hence causality is a must. Care must be taken that no threads
 //! are spawned here other than main database server thread that does everything in series.
 
-use crate::definitions::api_v2::ServerInfo;
 use crate::{
     definitions::{
         api_v2::{
-            CurrencyInfo, OrderCreateResponse, OrderInfo, OrderQuery, PaymentStatus, Timestamp,
+            Amount, BlockNumber, CurrencyInfo, ExtrinsicIndex, FinalizedTx, OrderCreateResponse,
+            OrderInfo, OrderQuery, PaymentStatus, ServerInfo, Timestamp, TransactionInfo, TxStatus,
             WithdrawalStatus,
         },
         Version,
     },
-    error::{DbError, Error},
+    error::DbError,
     utils::task_tracker::TaskTracker,
 };
 use codec::{Decode, Encode};
-use names::{Generator, Name};
+use names::Generator;
+use sled::Tree;
 use std::time::SystemTime;
 use substrate_crypto_light::common::AccountId32;
 use tokio::sync::{mpsc, oneshot};
@@ -32,6 +33,7 @@ const ACCOUNTS: &str = "accounts";
 //type ACCOUNTS_KEY = (Option<AssetId>, Account);
 //type ACCOUNTS_VALUE = InvoiceKey;
 
+const PENDING_TRANSACTIONS: &str = "pending_transactions";
 const TRANSACTIONS: &str = "transactions";
 
 const HIT_LIST: &str = "hit_list";
@@ -69,6 +71,7 @@ pub struct Database {
 }
 
 impl Database {
+    #[expect(clippy::too_many_lines)]
     pub fn init(
         path_option: Option<String>,
         task_tracker: TaskTracker,
@@ -90,6 +93,12 @@ impl Database {
         let orders = database
             .open_tree(ORDERS_TABLE)
             .map_err(DbError::DbStartError)?;
+        let transactions = database
+            .open_tree(TRANSACTIONS)
+            .map_err(DbError::DbStartError)?;
+        let pending_transactions = database
+            .open_tree(PENDING_TRANSACTIONS)
+            .map_err(DbError::DbStartError)?;
 
         task_tracker.spawn("Database server", async move {
             // No process forking beyond this point!
@@ -106,7 +115,7 @@ impl Database {
                                     _ => None,
                                 }
                             })
-                            .filter(|(a, b)| b.payment_status == PaymentStatus::Pending)
+                            .filter(|(_, b)| b.payment_status == PaymentStatus::Pending)
                             .collect()));
                     }
                     DbRequest::CreateOrder(request) => {
@@ -120,10 +129,18 @@ impl Database {
                         ));
                     }
                     DbRequest::ReadOrder(request) => {
-                        let _unused = request.res.send(read_order(request.order, &orders));
+                        let _unused = request.res.send(read_order(
+                            &request.order,
+                            &orders,
+                            &transactions,
+                            &pending_transactions,
+                        ));
                     }
                     DbRequest::MarkPaid(request) => {
                         let _unused = request.res.send(mark_paid(request.order, &orders));
+                    }
+                    DbRequest::IsMarkedPaid(order, res) => {
+                        let _unused = res.send(is_marked_paid(&orders, order));
                     }
                     DbRequest::MarkWithdrawn(request) => {
                         let _unused = request.res.send(mark_withdrawn(request.order, &orders));
@@ -133,6 +150,14 @@ impl Database {
                     }
                     DbRequest::MarkStuck(request) => {
                         let _unused = request.res.send(mark_stuck(request.order, &orders));
+                    }
+                    DbRequest::RecordTransaction { order, tx, res } => {
+                        let _unused = res.send(record_transaction(
+                            &transactions,
+                            &pending_transactions,
+                            order,
+                            tx,
+                        ));
                     }
                     DbRequest::InitializeServerInfo(res) => {
                         let server_info_tree = database
@@ -225,12 +250,32 @@ impl Database {
         rx.await.map_err(|_| DbError::DbEngineDown)?
     }
 
+    pub async fn record_transaction(
+        &self,
+        order: String,
+        tx: TransactionInfoDb,
+    ) -> Result<(), DbError> {
+        let (res, rx) = oneshot::channel();
+        let _unused = self
+            .tx
+            .send(DbRequest::RecordTransaction { order, tx, res })
+            .await;
+
+        rx.await.map_err(|_| DbError::DbEngineDown)?
+    }
+
     pub async fn mark_paid(&self, order: String) -> Result<OrderInfo, DbError> {
         let (res, rx) = oneshot::channel();
         let _unused = self
             .tx
             .send(DbRequest::MarkPaid(MarkPaid { order, res }))
             .await;
+        rx.await.map_err(|_| DbError::DbEngineDown)?
+    }
+
+    pub async fn is_marked_paid(&self, order: String) -> Result<bool, DbError> {
+        let (res, rx) = oneshot::channel();
+        let _unused = self.tx.send(DbRequest::IsMarkedPaid(order, res)).await;
         rx.await.map_err(|_| DbError::DbEngineDown)?
     }
 
@@ -274,9 +319,15 @@ enum DbRequest {
     MarkPaid(MarkPaid),
     MarkWithdrawn(ModifyOrder),
     MarkForced(ModifyOrder),
+    IsMarkedPaid(String, oneshot::Sender<Result<bool, DbError>>),
     MarkStuck(ModifyOrder),
     InitializeServerInfo(oneshot::Sender<Result<String, DbError>>),
     Shutdown(oneshot::Sender<()>),
+    RecordTransaction {
+        order: String,
+        tx: TransactionInfoDb,
+        res: oneshot::Sender<Result<(), DbError>>,
+    },
 }
 
 pub struct CreateOrder {
@@ -316,7 +367,7 @@ fn create_order(
     query: OrderQuery,
     currency: CurrencyInfo,
     payment_account: String,
-    orders: &sled::Tree,
+    orders: &Tree,
     account_lifetime: Timestamp,
 ) -> Result<OrderCreateResponse, DbError> {
     let order_key = order.encode();
@@ -344,16 +395,121 @@ fn create_order(
     })
 }
 
-fn read_order(order: String, orders: &sled::Tree) -> Result<Option<OrderInfo>, DbError> {
-    let order_key = order.encode();
-    if let Some(order) = orders.get(order_key)? {
-        Ok(Some(OrderInfo::decode(&mut &order[..])?))
-    } else {
-        Ok(None)
-    }
+fn read_order(
+    key: &str,
+    orders: &Tree,
+    tx_table: &Tree,
+    pending_tx_table: &Tree,
+) -> Result<Option<OrderInfo>, DbError> {
+    let order_key = key.encode();
+    let Some(order_encoded) = orders.get(&order_key)? else {
+        return Ok(None);
+    };
+
+    let mut order = OrderInfo::decode(&mut &order_encoded[..])?;
+    let transactions = tx_table
+        .scan_prefix(&order_key)
+        .map(|result| {
+            result.map_err(DbError::from).and_then(|(k, v)| {
+                let (_order_key, block_number, position_in_block) =
+                    <(String, BlockNumber, ExtrinsicIndex)>::decode(&mut k.as_ref())?;
+
+                TransactionInfoDb::decode(&mut v.as_ref())
+                    .map(|mut tx| {
+                        tx.inner.finalized_tx = Some(FinalizedTxDb {
+                            block_number,
+                            position_in_block,
+                        });
+
+                        TransactionInfo::from(tx)
+                    })
+                    .map_err(Into::into)
+            })
+        })
+        .chain(pending_tx_table.scan_prefix(order_key).map(|result| {
+            result.map_err(DbError::from).and_then(|(k, v)| {
+                let (_order_key, transaction_bytes) = <(String, String)>::decode(&mut k.as_ref())?;
+
+                TransactionInfoDbInner::decode(&mut v.as_ref())
+                    .map(|tx| TransactionInfo {
+                        finalized_tx: None,
+                        transaction_bytes,
+                        sender: tx.sender,
+                        recipient: tx.recipient,
+                        amount: tx.amount,
+                        currency: tx.currency,
+                        status: tx.status,
+                    })
+                    .map_err(Into::into)
+            })
+        }))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    order.transactions = transactions;
+
+    Ok(order.into())
 }
 
-fn mark_paid(order: String, orders: &sled::Tree) -> Result<OrderInfo, DbError> {
+fn record_transaction(
+    tx_table: &Tree,
+    pending_tx_table: &Tree,
+    order: String,
+    mut tx: TransactionInfoDb,
+) -> Result<(), DbError> {
+    let pending_tx_key = (order.clone(), tx.transaction_bytes.clone()).encode();
+    let finalized_info = tx
+        .inner
+        .finalized_tx
+        .take()
+        .zip(tx.inner.finalized_tx_timestamp.as_ref());
+
+    // Search the given transaction among pending ones and update it or move it to finalized
+    // transactions.
+    if let Some(_encoded_tx_inner) = pending_tx_table.get(&pending_tx_key)? {
+        if let Some((finalized_tx, _finalized_tx_timestamp)) = finalized_info {
+            tracing::debug!("moving pending tx to finalized");
+
+            pending_tx_table.remove(pending_tx_key)?;
+
+            tx_table.insert(
+                (
+                    order,
+                    finalized_tx.block_number,
+                    finalized_tx.position_in_block,
+                )
+                    .encode(),
+                tx.encode(),
+            )?;
+        } else {
+            tracing::debug!("updating pending tx");
+
+            pending_tx_table.insert(pending_tx_key, tx.inner.encode())?;
+        }
+    // Save the given finalized transaction.
+    } else if let Some((finalized_tx, _finalized_tx_timestamp)) = finalized_info {
+        tracing::debug!("save finalized tx");
+
+        tx_table.insert(
+            (
+                order,
+                finalized_tx.block_number,
+                finalized_tx.position_in_block,
+            )
+                .encode(),
+            tx.encode(),
+        )?;
+
+    // Save the pending transaction.
+    } else {
+        tracing::debug!("adding pending tx");
+
+        pending_tx_table.insert(pending_tx_key, tx.inner.encode())?;
+    }
+
+    Ok(())
+}
+
+fn mark_paid(order: String, orders: &Tree) -> Result<OrderInfo, DbError> {
     let order_key = order.encode();
     if let Some(order_info) = orders.get(order_key)? {
         let mut order_info = OrderInfo::decode(&mut &order_info[..])?;
@@ -368,7 +524,19 @@ fn mark_paid(order: String, orders: &sled::Tree) -> Result<OrderInfo, DbError> {
         Err(DbError::OrderNotFound(order))
     }
 }
-fn mark_withdrawn(order: String, orders: &sled::Tree) -> Result<(), DbError> {
+
+fn is_marked_paid(orders: &Tree, order: String) -> Result<bool, DbError> {
+    let order_key = order.encode();
+    if let Some(order_info) = orders.get(order_key)? {
+        let order_info = OrderInfo::decode(&mut &order_info[..])?;
+
+        Ok(order_info.payment_status == PaymentStatus::Paid)
+    } else {
+        Err(DbError::OrderNotFound(order))
+    }
+}
+
+fn mark_withdrawn(order: String, orders: &Tree) -> Result<(), DbError> {
     let order_key = order.encode();
     if let Some(order_info) = orders.get(order_key)? {
         let mut order_info = OrderInfo::decode(&mut &order_info[..])?;
@@ -388,7 +556,7 @@ fn mark_withdrawn(order: String, orders: &sled::Tree) -> Result<(), DbError> {
     }
 }
 
-fn mark_forced(order: String, orders: &sled::Tree) -> Result<(), DbError> {
+fn mark_forced(order: String, orders: &Tree) -> Result<(), DbError> {
     let order_key = order.encode();
     if let Some(order_info) = orders.get(order_key)? {
         let mut order_info = OrderInfo::decode(&mut &order_info[..])?;
@@ -409,7 +577,7 @@ fn mark_forced(order: String, orders: &sled::Tree) -> Result<(), DbError> {
         Err(DbError::OrderNotFound(order))
     }
 }
-fn mark_stuck(order: String, orders: &sled::Tree) -> Result<(), DbError> {
+fn mark_stuck(order: String, orders: &Tree) -> Result<(), DbError> {
     if let Some(order_info) = orders.get(order.clone())? {
         let mut order_info = OrderInfo::decode(&mut &order_info[..])?;
         if order_info.payment_status == PaymentStatus::Paid {
@@ -425,5 +593,60 @@ fn mark_stuck(order: String, orders: &sled::Tree) -> Result<(), DbError> {
         }
     } else {
         Err(DbError::OrderNotFound(order))
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct TransactionInfoDbInner {
+    pub finalized_tx: Option<FinalizedTxDb>,
+    pub finalized_tx_timestamp: Option<String>,
+    pub sender: String,
+    pub recipient: String,
+    pub amount: Amount,
+    pub currency: CurrencyInfo,
+    pub status: TxStatus,
+    pub kind: TxKind,
+}
+
+#[derive(Encode, Decode)]
+pub struct TransactionInfoDb {
+    pub transaction_bytes: String,
+    pub inner: TransactionInfoDbInner,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub enum TxKind {
+    Payment,
+    Withdrawal,
+}
+
+#[derive(Encode, Decode)]
+pub struct FinalizedTxDb {
+    pub block_number: BlockNumber,
+    pub position_in_block: ExtrinsicIndex,
+}
+
+impl From<TransactionInfoDb> for TransactionInfo {
+    fn from(value: TransactionInfoDb) -> Self {
+        let finalized_tx = value.inner.finalized_tx.and_then(|tx| {
+            value
+                .inner
+                .finalized_tx_timestamp
+                .map(|timestamp| FinalizedTx {
+                    block_number: tx.block_number,
+                    position_in_block: tx.position_in_block,
+                    timestamp,
+                })
+        });
+
+        Self {
+            finalized_tx,
+            transaction_bytes: value.transaction_bytes,
+            sender: value.inner.sender,
+            recipient: value.inner.recipient,
+            amount: value.inner.amount,
+            currency: value.inner.currency,
+            status: value.inner.status,
+        }
     }
 }
