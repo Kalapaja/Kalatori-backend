@@ -1645,7 +1645,7 @@ dependencies = [
  "sled",
  "sp-crypto-hashing",
  "substrate-constructor",
- "substrate-crypto-light",
+ "substrate-crypto-light 0.1.0 (git+https://github.com/Alzymologist/substrate-crypto-light)",
  "substrate_parser",
  "thiserror 2.0.3",
  "time",
@@ -2891,14 +2891,35 @@ dependencies = [
  "scale-info",
  "sp-arithmetic",
  "sp-crypto-hashing",
- "substrate-crypto-light",
+ "substrate-crypto-light 0.1.0 (git+https://github.com/Alzymologist/substrate-crypto-light)",
  "substrate_parser",
 ]
 
 [[package]]
 name = "substrate-crypto-light"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-crypto-light#e1c07e19ccb19862accc2771d3b7ec0f86c80a36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86eaa081c10ed391947506525a50da570841ccf93f83a642ff91f36732e91b51"
+dependencies = [
+ "base58",
+ "blake2b_simd",
+ "ed25519-zebra",
+ "hmac",
+ "k256",
+ "lazy_static",
+ "parity-scale-codec",
+ "pbkdf2",
+ "rand_core",
+ "regex",
+ "schnorrkel",
+ "sha2",
+ "zeroize",
+]
+
+[[package]]
+name = "substrate-crypto-light"
+version = "0.1.0"
+source = "git+https://github.com/Alzymologist/substrate-crypto-light#a2d0db1f0ce150a9cc236ca01d8b959c33da7819"
 dependencies = [
  "base58",
  "blake2b_simd",
@@ -2917,8 +2938,8 @@ dependencies = [
 
 [[package]]
 name = "substrate_parser"
-version = "0.6.1"
-source = "git+https://github.com/Alzymologist/substrate-parser#3a4a2c51d3d0c0141f1942631846f57b5bfe8b07"
+version = "0.7.0"
+source = "git+https://github.com/Alzymologist/substrate-parser#77d510715d83a85f0838791118fe6ab999a8d5af"
 dependencies = [
  "bitvec",
  "external-memory-tools",
@@ -2931,7 +2952,7 @@ dependencies = [
  "scale-info",
  "sp-arithmetic",
  "sp-crypto-hashing",
- "substrate-crypto-light",
+ "substrate-crypto-light 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3025,7 +3046,7 @@ dependencies = [
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3589,7 +3610,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
