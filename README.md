@@ -128,7 +128,6 @@ Refer to the Kalatori project [board](https://github.com/orgs/Alzymologist/proje
 
 ### Acknowledgments
 
-- Polkadot community for being patient, helpful, and supportive.
-- Web3 Foundation for providing the grants and support.
-- Liberland team for helping push the project forward.
+- Polkadot community
+- Liberland team
 
