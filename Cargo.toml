@@ -63,10 +63,10 @@ async-lock = "3"
 time = "0.3"
 reqwest = "0.12"
 
-substrate_parser = { git = "https://github.com/Alzymologist/substrate-parser" }
-substrate-constructor = { git = "https://github.com/Alzymologist/substrate-constructor" }
-mnemonic-external = { git = "https://github.com/Alzymologist/mnemonic-external" }
-substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light" }
+substrate_parser = "0.7.0"
+substrate-constructor = "0.2.0"
+mnemonic-external = "0.1.0"
+substrate-crypto-light = "0.1.0"
 
 [build-dependencies]
 # Don't forget to update me in `[dependencies]`!

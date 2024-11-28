@@ -1788,7 +1788,8 @@ dependencies = [
 [[package]]
 name = "mnemonic-external"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/mnemonic-external#2a02a0795e1532b1115e8d13e084c90539f31752"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acd8b607d24e1721a79eb4e30054fe776bf3956a87bd57f59c15fa1f72ad8721"
 dependencies = [
  "sha2",
  "zeroize",
@@ -2878,8 +2879,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "substrate-constructor"
-version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-constructor#9e4f0b27596658a9ecd3fd5bf5423713a911de54"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "269619703d949df9b9a1772ed2cdc6b2ff805dd9ff7e0f5c19241bc53cff6d93"
 dependencies = [
  "bitvec",
  "external-memory-tools",
@@ -2898,7 +2900,8 @@ dependencies = [
 [[package]]
 name = "substrate-crypto-light"
 version = "0.1.0"
-source = "git+https://github.com/Alzymologist/substrate-crypto-light#e1c07e19ccb19862accc2771d3b7ec0f86c80a36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86eaa081c10ed391947506525a50da570841ccf93f83a642ff91f36732e91b51"
 dependencies = [
  "base58",
  "blake2b_simd",
@@ -2917,8 +2920,9 @@ dependencies = [
 
 [[package]]
 name = "substrate_parser"
-version = "0.6.1"
-source = "git+https://github.com/Alzymologist/substrate-parser#3a4a2c51d3d0c0141f1942631846f57b5bfe8b07"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7608864a21e2c356727f7ac0206252fb2c1cc4cee7c8539216528c6b54efca5"
 dependencies = [
  "bitvec",
  "external-memory-tools",
