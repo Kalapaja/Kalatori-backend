@@ -1,8 +1,10 @@
 ## A Gateway Daemon for Kalatori
 
-Kalatori is an open-source daemon designed to enable secure and scalable blockchain payment processing. Licensed under GPLv2 ([LICENSE](LICENSE)), Kalatori currently supports assets on the Polkadot relay chain and its parachains.
+!!! KALATORI IS IN PUBLIC BETA !!!
 
-The daemon derives unique accounts for each payment using a provided seed phrase and outputs all payments to a specified recipient wallet. It also offers limited transaction tracking for order management. Kalatori operates in a single-threaded mode and supports multiple currencies configured in a simple TOML-based configuration file.
+Kalatori is an open-source daemon designed to enable secure and scalable blockchain payment processing. Licensed under GPLv3 ([LICENSE](LICENSE)), Kalatori currently supports assets on the Polkadot relay chain and its parachains.
+
+The daemon derives unique accounts for each payment using a provided seed phrase and outputs all payments to a specified recipient wallet. It also offers limited transaction tracking for order management. Kalatori operates in a multithreaded mode and supports multiple currencies configured in a simple TOML-based configuration file.
 
 Client facing frontends can communicate with Kalatori leveraging exposed API described in the [API documentation](https://alzymologist.github.io/kalatori-api).
 
@@ -112,7 +114,7 @@ We welcome contributions! Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ### License
 
-Kalatori is open-source software licensed under the GPLv2 License. See the [LICENSE](LICENSE) file for more details.
+Kalatori is open-source software licensed under the GPLv3 License. See the [LICENSE](LICENSE) file for more details.
 
 ### Community and Support
 

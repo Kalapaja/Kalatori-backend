@@ -1,5 +1,7 @@
 # Kalatori docs
 
+!!!OUTDATED!!!
+
 
 ### Decisions
 1. Amounts in tx/rx is f64, daemon stores it as u128

@@ -46,6 +46,11 @@ jobs:
         run: |
           docker-compose build
 
+      - name: Create Network
+        working-directory: ./tests
+        run: |
+          docker network create kalatori-network
+
       - name: Run Tests
         working-directory: ./tests
         run: |
