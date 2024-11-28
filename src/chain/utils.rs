@@ -1,6 +1,11 @@
 //! Utils to process chain data without accessing the chain
 
-use crate::{chain::definitions::BlockHash, definitions::api_v2::AssetId, error::ChainError};
+use crate::{
+    chain::definitions::BlockHash,
+    database::TxKind,
+    definitions::{api_v2::AssetId, Balance},
+    error::ChainError,
+};
 use codec::Encode;
 use frame_metadata::{
     v14::StorageHasher,
@@ -642,29 +647,45 @@ pub fn events_entry_metadata(
     }
 }
 
-pub fn was_balance_received_at_account(
+pub fn parse_transfer_event(
     known_account: &AccountId32,
     balance_transfer_event_fields: &[FieldData],
-) -> bool {
-    let mut found_receiver = None;
-    for field in balance_transfer_event_fields.iter() {
-        if let Some(ref field_name) = field.field_name {
-            if field_name == "to" {
-                if let ParsedData::Id(ref account_id32) = field.data.data {
-                    if found_receiver.is_none() {
-                        found_receiver = Some(account_id32);
-                    } else {
-                        found_receiver = None;
-                        break;
+) -> Option<(TxKind, AccountId32, Balance)> {
+    let mut from_option = None;
+    let mut to_option = None;
+    let mut amount_option = None;
+
+    for field in balance_transfer_event_fields {
+        if let Some(field_name) = field.field_name.as_deref() {
+            match field_name {
+                "to" => {
+                    if let ParsedData::Id(ref account_id32) = field.data.data {
+                        to_option = Some(account_id32);
                     }
                 }
+                "from" => {
+                    if let ParsedData::Id(ref account_id32) = field.data.data {
+                        from_option = Some(account_id32);
+                    }
+                }
+                "amount" => {
+                    if let ParsedData::PrimitiveU128 { value, .. } = field.data.data {
+                        amount_option = Some(Balance(value));
+                    }
+                }
+                _ => {}
             }
         }
     }
-    if let Some(receiver) = found_receiver {
-        receiver.0 == known_account.0
-    } else {
-        false
+
+    match (from_option, to_option, amount_option) {
+        (Some(from), Some(to), Some(amount)) if from == known_account => {
+            Some((TxKind::Withdrawal, *to, amount))
+        }
+        (Some(from), Some(to), Some(amount)) if to == known_account => {
+            Some((TxKind::Payment, *from, amount))
+        }
+        _ => None,
     }
 }
 

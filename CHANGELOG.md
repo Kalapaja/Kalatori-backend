@@ -2,13 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.8] - 2024-11-13
+
+### 🚀 Features
+
+- Order transaction storage implementation.
+
 ## [0.2.7] - 2024-11-18
 
 ### 🚀 Features
 
 - Asset Hub transactions with fee currency
-  - Autofill tip with asset
-  - Pass asset id into transaction constructor to properly select fee currency
+- Autofill tip with asset
+- Pass asset id into transaction constructor to properly select fee currency
 
 ### 🧪 Testing
 

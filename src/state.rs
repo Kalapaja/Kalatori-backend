@@ -1,7 +1,7 @@
 use crate::error::ForceWithdrawalError;
 use crate::{
     chain::ChainManager,
-    database::{ConfigWoChains, Database},
+    database::{ConfigWoChains, Database, TransactionInfoDb},
     definitions::api_v2::{
         CurrencyProperties, Health, OrderCreateResponse, OrderInfo, OrderQuery, OrderResponse,
         OrderStatus, RpcInfo, ServerHealth, ServerInfo, ServerStatus,
@@ -23,6 +23,7 @@ pub struct State {
 }
 
 impl State {
+    #[expect(clippy::too_many_lines)]
     pub fn initialise(
         signer: Signer,
         ConfigWoChains {
@@ -35,7 +36,7 @@ impl State {
         instance_id: String,
         task_tracker: TaskTracker,
         shutdown_notification: CancellationToken,
-    ) -> Result<Self, Error> {
+    ) -> Self {
         /*
             currencies: HashMap<String, CurrencyProperties>,
             recipient: AccountId,
@@ -153,6 +154,13 @@ impl State {
                                     }
                                 }
                             }
+                            StateAccessRequest::RecordTransaction { order, tx: new_tx } => {
+                                if let Err(e) = state.db.record_transaction(order, new_tx).await {
+                                    tracing::error!(
+                                        "Found a transaction related to an order, but this could not be recorded! {e:?}"
+                                    )
+                                }
+                            }
                             StateAccessRequest::OrderWithdrawn(id) => {
                                 match state.db.mark_withdrawn(id.clone()).await {
                                     Ok(order) => {
@@ -192,6 +200,18 @@ impl State {
                                     }
                                 }
                             }
+                            StateAccessRequest::IsOrderPaid(id, res) => {
+                                match state.db.is_marked_paid(id).await {
+                                    Ok(paid) => {
+                                        res.send(paid).map_err(|_| Error::Fatal)?;
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to read the order state! {e:?}"
+                                        )
+                                    }
+                                }
+                            }
                         };
                     }
                     // Orchestrate shutdown from here
@@ -217,9 +237,8 @@ impl State {
             Ok("State handler is shutting down")
         });
 
-        Ok(Self { tx })
+        Self { tx }
     }
-
     fn overall_health(connected_rpcs: &Vec<RpcInfo>) -> Health {
         if connected_rpcs.iter().all(|rpc| rpc.status == Health::Ok) {
             Health::Ok
@@ -301,6 +320,15 @@ impl State {
         rx.await.map_err(|_| Error::Fatal)
     }
 
+    pub async fn is_order_paid(&self, order: String) -> Result<bool, Error> {
+        let (res, rx) = oneshot::channel();
+        self.tx
+            .send(StateAccessRequest::IsOrderPaid(order, res))
+            .await
+            .map_err(|_| Error::Fatal)?;
+        rx.await.map_err(|_| Error::Fatal)
+    }
+
     pub async fn order_paid(&self, order: String) {
         if self
             .tx
@@ -311,6 +339,7 @@ impl State {
             tracing::warn!("Data race on shutdown; please restart the daemon for cleaning up");
         };
     }
+
     pub async fn order_withdrawn(&self, order: String) {
         if self
             .tx
@@ -341,6 +370,17 @@ impl State {
             tx: self.tx.clone(),
         }
     }
+
+    pub async fn record_transaction(
+        &self,
+        tx: TransactionInfoDb,
+        order: String,
+    ) -> Result<(), Error> {
+        self.tx
+            .send(StateAccessRequest::RecordTransaction { order, tx })
+            .await
+            .map_err(|_| Error::Fatal)
+    }
 }
 
 enum StateAccessRequest {
@@ -354,6 +394,11 @@ enum StateAccessRequest {
     ServerStatus(oneshot::Sender<ServerStatus>),
     ServerHealth(oneshot::Sender<ServerHealth>),
     OrderPaid(String),
+    IsOrderPaid(String, oneshot::Sender<bool>),
+    RecordTransaction {
+        order: String,
+        tx: TransactionInfoDb,
+    },
     OrderWithdrawn(String),
     ForceWithdrawal(String),
 }
