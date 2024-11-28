@@ -14,6 +14,7 @@ documentation = "README.md"
 readme = "README.md"
 keywords = ["substrate", "blockchain", "finance", "service", "middleware"]
 categories = ["finance"]
+exclude = [".github",, "Dockerfile", "chopsticks/", "configs", "is_version_greater.sh", "shoot.sh", "start.sh", "/tests"]
 rust-version = "1.82"
 
 [dependencies]
