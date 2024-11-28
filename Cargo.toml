@@ -3,6 +3,7 @@ name = "kalatori"
 authors = [
 	"Alexander Slesarev <slesarew@gmail.com>",
     	"Vova Lando <vova.lando@gmail.com>",
+     	"Artyom Sheviakov <fluidcells@pm.me>",
 ]
 version = "0.3.0"
 edition = "2021"
