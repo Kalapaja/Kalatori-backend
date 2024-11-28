@@ -2,7 +2,7 @@
 name = "kalatori"
 authors = [
 	"Alexander Slesarev <slesarew@gmail.com>",
-    "vovke <vova.lando@gmail.com>",
+    	"Vova Lando <vova.lando@gmail.com>",
 ]
 version = "0.3.0"
 edition = "2021"
@@ -14,7 +14,7 @@ documentation = "README.md"
 readme = "README.md"
 keywords = ["substrate", "blockchain", "finance", "service", "middleware"]
 categories = ["finance"]
-exclude = [".github", "Dockerfile", "chopsticks/", "configs", "is_version_greater.sh", "shoot.sh", "start.sh", "/tests"]
+exclude = [".github", ".gitignore", "cliff.toml", "Dockerfile", "chopsticks/", "configs", "is_version_greater.sh", "shoot.sh", "start.sh", "/tests"]
 rust-version = "1.82"
 
 [dependencies]
