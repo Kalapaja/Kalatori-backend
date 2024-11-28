@@ -1,6 +1,9 @@
 [package]
 name = "kalatori"
-authors = ["Alzymologist Oy <contact@zymologia.fi>"]
+authors = [
+	"Alexander Slesarev <slesarew@gmail.com>",
+    "vovke <vova.lando@gmail.com>",
+]
 version = "0.3.0"
 edition = "2021"
 description = "A gateway daemon for Kalatori."
