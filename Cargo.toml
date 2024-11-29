@@ -1,14 +1,21 @@
 [package]
 name = "kalatori"
-authors = ["Alzymologist Oy <contact@zymologia.fi>"]
-version = "0.2.8"
+authors = [
+	"Alexander Slesarev <slesarew@gmail.com>",
+    	"Vova Lando <vova.lando@gmail.com>",
+     	"Artyom Sheviakov <fluidcells@pm.me>",
+]
+version = "0.3.0"
 edition = "2021"
 description = "A gateway daemon for Kalatori."
 license = "GPL-3.0-or-later"
+homepage = "https://github.com/Alzymologist/Kalatori-backend"
 repository = "https://github.com/Alzymologist/Kalatori-backend"
-readme = true
+documentation = "README.md"
+readme = "README.md"
 keywords = ["substrate", "blockchain", "finance", "service", "middleware"]
 categories = ["finance"]
+exclude = [".github", "cliff.toml", "Dockerfile", "chopsticks/", "configs", "is_version_greater.sh", "shoot.sh", "start.sh", "/tests"]
 rust-version = "1.82"
 
 [dependencies]
@@ -61,10 +68,10 @@ async-lock = "3"
 time = "0.3"
 reqwest = "0.12"
 
-substrate_parser = { git = "https://github.com/Alzymologist/substrate-parser" }
-substrate-constructor = { git = "https://github.com/Alzymologist/substrate-constructor" }
-mnemonic-external = { git = "https://github.com/Alzymologist/mnemonic-external" }
-substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light" }
+substrate_parser = "0.7.0"
+substrate-constructor = "0.2.0"
+mnemonic-external = "0.1.0"
+substrate-crypto-light = "0.1.0"
 
 [build-dependencies]
 # Don't forget to update me in `[dependencies]`!

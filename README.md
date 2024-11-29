@@ -1,101 +1,133 @@
-## A gateway daemon for Kalatori
+## A Gateway Daemon for Kalatori
 
+!!! KALATORI IS IN PUBLIC BETA !!!
+
+Kalatori is an open-source daemon designed to enable secure and scalable blockchain payment processing. Licensed under GPLv3 ([LICENSE](LICENSE)), Kalatori currently supports assets on the Polkadot relay chain and its parachains.
+
+The daemon derives unique accounts for each payment using a provided seed phrase and outputs all payments to a specified recipient wallet. It also offers limited transaction tracking for order management. Kalatori operates in a multithreaded mode and supports multiple currencies configured in a simple TOML-based configuration file.
+
+Client facing frontends can communicate with Kalatori leveraging exposed API described in the [API documentation](https://alzymologist.github.io/kalatori-api).
+
+---
 ### Download
 
-Compiled binaries for Linux x86-64 can be found in the "Releases" section.
+Download the latest Docker container or x86-64 release from the [GitHub releases page](https://github.com/Alzymologist/Kalatori-backend/releases/latest).
 
-### Compile from the source
+---
 
-To compile the daemon, the latest stable Rust compiler version is required. Then run the following command:
+### Compile from Source
+
+To compile the daemon, ensure you have the latest stable version of the Rust compiler installed. Then, run:
 
 ```sh
-cargo b -r --workspace
+cargo build --release --workspace
 ```
-Compiled binaries can be found in the `target/release` path.
+The compiled binaries will be located in the `target/release` path.
 
-### Structure & settings
+### Project Structure
 
-The daemon for Kalatori consists of 2 variants:
-- `kalatori` may be used for DOT, the native currency of the Polkadot and Polkadot Asset Hub chains.
-- `kalatori-ah` may be used for the Polkadot Asset Hub chain and 2 of its assets: USDt (1984) & USD Coin (1337).
+- `chopsticks`: Contains configuration files for the Chopsticks tool and a Docker Compose setup for spawning Polkadot and AssetHub test chains.
+- `configs`: Contains configuration files for supported chains and assets.
+- `docs`: Includes project documentation.
+- `src`: The source code for the Kalatori daemon.
+- `tests`: Black-box test suite with a Docker Compose setup for testing the daemon.
+- `Dockerfile`: Instructions for building a Docker image of the daemon.
 
-Both variants have almost the same startup environment variables:
-- KALATORI_HOST: an address where the daemon opens its TCP socket server.
-- KALATORI_SEED: a seed that's used as a base for the account derivation.
-- KALATORI_DATABASE: a path to the daemon future/existing database.
-> Note that a separate database file must be used for each supported currency, otherwise the database will be corrupted.
-- KALATORI_RPC: an address of a Substrate RPC server.
-- KALATORI_OVERRIDE_RPC: add this variable with any value to allow changing an RPC server address in the database.
-- KALATORI_DECIMALS: set decimals for the chain native currency.
-> Presents only in `kalatori`.
-- KALATORI_USD_ASSET: sets which USD asset should be used. Possible value is "USDT" or "USDC".
-> Presents only in `kalatori-ah`.
-- KALATORI_DESTINATION: a hexadecimal address of the account that the daemon will send all payments to.
+### Configuration File Example
 
-### Examples
+For Polkadot and Asset Hub chains, the configuration file should look like this:
 
-A tipical command to run `kalatori` for the Polkadot chain may look like this:
+```toml
+account-lifetime = 604800000 # 1 week.
+debug = true
+depth = 86400000 # 1 day.
+
+[[chain]]
+name = "polkadot"
+native-token = "DOT"
+decimals = 10
+endpoints = [
+    "wss://rpc.polkadot.io",
+    "wss://1rpc.io/dot",
+]
+
+[[chain]]
+name = "statemint"
+endpoints = [
+    "wss://polkadot-asset-hub-rpc.polkadot.io",
+    "wss://statemint-rpc.dwellir.com",
+]
+
+[[chain.asset]]
+name = "USDC"
+id = 1337
+
+[[chain.asset]]
+name = "USDt"
+id = 1984
+```
+
+### Environment variables
+
+Kalatori requires the following environment variables for configuration:
+- `KALATORI_HOST`: Address for the daemon's TCP socket server.
+- `KALATORI_SEED`: Seed phrase for account derivation.
+- `KALATORI_CONFIG`: Path to the chain configuration file in the configs directory.
+- `KALATORI_RECIPIENT`: The hexadecimal address to which received payments will be transferred.
+- `KALATORI_REMARK`: A string added to the transaction's remark field.
+
+### Usage Example
+
+Run Kalatori for the Polkadot chain:
 
 ```sh
 KALATORI_HOST="127.0.0.1:16726" \
+KALATORI_CONFIG="configs/polkadot.toml" \
 KALATORI_SEED="bottom drive obey lake curtain smoke basket hold race lonely fit walk" \
-KALATORI_DATABASE="database.redb" \
-KALATORI_RPC="wss://rpc.polkadot.io" \
-KALATORI_DECIMALS="12" \
-KALATORI_DESTINATION="0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d" \
+KALATORI_RECIPIENT="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" \
+KALATORI_REMARK="test" \
 kalatori
-```
-
-And a command to run `kalatori-ah`for the Polkadot AssetHub chain may look like this:
-
-```sh
-KALATORI_HOST="127.0.0.1:16726" \
-KALATORI_SEED="bottom drive obey lake curtain smoke basket hold race lonely fit walk" \
-KALATORI_DATABASE="database-ah-usdc.redb" \
-KALATORI_RPC="wss://polkadot-asset-hub-rpc.polkadot.io" \
-KALATORI_DESTINATION="0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d" \
-KALATORI_USD_ASSET="USDC"
-kalatori-ah
-```
+````
 
 ### Testing
 
-[Chopsticks](https://github.com/AcalaNetwork/chopsticks) can be used to test the daemon out on a copy of a real network. This repository contains 2 config examples for testing:
+The black-box test suite verifies the daemon's functionality by interacting with a running instance. Use the following steps to set it up:
+1. Start the daemon and test environment:
+   ```sh
+   cd tests
+   docker-compose up
+   ```
+2. Run the tests manually using Yarn:
+   ```sh
+   ct tests/kalatori-api-test-suite
+   yarn
+   yarn test
+   ```
 
-### - Polkadot
+Ensure the `DAEMON_HOST` environment variable points to the running daemon (default: `localhost:16726`).
 
-Use the following command inside this repository root directory to run Chopstick with the Polkadot config example:
+For more details, refer to the [testing suite README.md](tests/kalatori-api-test-suite/README.md).
 
-```sh
-npx @acala-network/chopsticks@latest -c chopsticks/pd.yml
-```
+### Contributing
 
-Then run `kalatori` with `KALATORI_RPC` set on the Chopsticks default server:
+We welcome contributions! Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on contributing and submitting pull requests.
 
-```sh
-KALATORI_HOST="127.0.0.1:16726" \
-KALATORI_SEED="bottom drive obey lake curtain smoke basket hold race lonely fit walk" \
-KALATORI_RPC="ws://localhost:8000" \
-KALATORI_DECIMALS="12" \
-KALATORI_DESTINATION="0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d" \
-kalatori
-```
+### License
 
-### - Polkadot Asset Hub
+Kalatori is open-source software licensed under the GPLv3 License. See the [LICENSE](LICENSE) file for more details.
 
-Use the following command inside this repository root directory to run Chopstick with the Polkadot Asset Hub config example:
+### Community and Support
 
-```sh
-npx @acala-network/chopsticks@latest -c chopsticks/pd-ah.yml
-```
+Join the discussion and get support on:
+- [Kalatori Matrix](https://matrix.to/#/#Kalatori-support:matrix.zymologia.fi)
+- [GitHub Discussions](https://github.com/Alzymologist/Kalatori-backend/discussions)
 
-Then run `kalatori-ah` with `KALATORI_RPC` set on the Chopsticks default server, and `KALATORI_USD_ASSET` set on the USD asset being tested:
+### Roadmap
 
-```sh
-KALATORI_HOST="127.0.0.1:16726" \
-KALATORI_SEED="bottom drive obey lake curtain smoke basket hold race lonely fit walk" \
-KALATORI_RPC="ws://localhost:8000" \
-KALATORI_DESTINATION="0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d" \
-KALATORI_USD_ASSET="USDC"
-kalatori-ah
-```
+Refer to the Kalatori project [board](https://github.com/orgs/Alzymologist/projects/2) and [milestones](https://github.com/Alzymologist/Kalatori-backend/milestones) for the current roadmap and upcoming features.
+
+### Acknowledgments
+
+- Polkadot community
+- Liberland team
+

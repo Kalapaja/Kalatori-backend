@@ -1,0 +1,25 @@
+account-lifetime = 86400000 # 1 day.
+depth = 3600000 # 1 hour.
+debug = true
+
+[[chain]]
+name = "rococo"
+native-token = "DOT"
+decimals = 10
+endpoints = [
+    "wss://node-polkadot.zymologia.fi",
+]
+
+[[chain]]
+name = "statemint"
+endpoints = [
+    "wss://node-polkadot-ah.zymologia.fi",
+]
+
+[[chain.asset]]
+name = "USDC"
+id = 1337
+
+[[chain.asset]]
+name = "USDt"
+id = 1984

@@ -1,3 +1,13 @@
+## Issues
+
+You can find issues waiting to be solved or create a new one in the [issues](https://github.com/Alzymologist/Kalatori-backend/issues) section.
+
+## Prerequisites
+
+- Rust: stable version
+- Docker: to run tests and spawn chopsticks instances
+- Node.js and Yarn: to run tests
+
 ## Preparing development environment
 
 It's possible to mimic to spawn chopsticks instances in parallel for development purposes. 
@@ -5,8 +15,9 @@ Chopsticks Dockerfile exposes 4 ports (8000, 8500, 9000, 9500), so you can spawn
 Note that the RPCs are not real, so the changes made on one chopsticks instance will not affect the others.
 
 1. `cd chopsticks`
-2. `docker compose up`, in case you want to just 2 instances edit the docker-compose.yml file
-3. start the app with `KALATORI_CONFIG` environment variable pointing to `configs/chopsticks.toml`
+2. Create docker network (do once) `docker network create kalatori-network`
+3. `docker compose up`, in case you want to just 2 instances edit the docker-compose.yml file
+4. start the app with `KALATORI_CONFIG` environment variable pointing to `configs/chopsticks.toml`
 
 ## Running tests locally
 

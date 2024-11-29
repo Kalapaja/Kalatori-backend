@@ -11,6 +11,8 @@ services:
     volumes:
       - ../chopsticks/pd.yml:/app/config.yml
     command: ["chopsticks", "-c", "/app/config.yml", "-p", "8000", "--addr", "0.0.0.0"]
+    networks:
+      - kalatori-network
 
   chopsticks-statemint:
     build:
@@ -22,6 +24,8 @@ services:
     volumes:
       - ../chopsticks/pd-ah.yml:/app/config.yml
     command: ["chopsticks", "-c", "/app/config.yml", "-p", "9000", "--addr", "0.0.0.0"]
+    networks:
+      - kalatori-network
 
   kalatori-rust-app:
     build:
@@ -42,6 +46,9 @@ services:
       - KALATORI_RECIPIENT=5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
       - KALATORI_REMARK=test
     command: /bin/sh -c "sleep 10 && /app/kalatori"  # 10-second sleep to ensure chopsticks is ready
+    networks:
+      - kalatori-network
+
 
   tests:
     image: node:20
@@ -53,3 +60,9 @@ services:
     environment:
       - DAEMON_HOST=http://kalatori-daemon:16726
     command: /bin/sh -c "sleep 180 && yarn install && yarn test"
+    networks:
+      - kalatori-network
+
+networks:
+    kalatori-network:
+      external: true
