@@ -37,7 +37,7 @@ jobs:
           cat dist/CHANGELOG_${VERSION}.md
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kalatori-${{ github.ref_name }}
           path: dist/
