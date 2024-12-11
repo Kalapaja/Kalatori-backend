@@ -1,6 +1,5 @@
 import request from 'supertest';
-import { connectPolkadot, transferFunds } from '../src/polkadot';
-import { ApiPromise } from '@polkadot/api';
+import {getAssetBalance, getDotBalance, reverseDecimals, transferFunds} from '../src/polkadot';
 
 describe('Order Endpoint Blackbox Tests', () => {
   const baseUrl = process.env.DAEMON_HOST;
@@ -14,7 +13,7 @@ describe('Order Endpoint Blackbox Tests', () => {
   };
 
   const usdcOrderData = {
-    amount: 1,
+    amount: 10,
     currency: 'USDC',
     callback: 'https://example.com/callback'
   };
@@ -254,6 +253,9 @@ describe('Order Endpoint Blackbox Tests', () => {
 
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
+
+    const paymentAccountDotBalance = await getDotBalance(orderDetails.currency.rpc_url, paymentAccount);
+    expect(reverseDecimals(paymentAccountDotBalance,10)).toBe(0);
   }, 100000);
 
   it('should create, repay, and automatically withdraw an order in USDC', async () => {
@@ -283,6 +285,9 @@ describe('Order Endpoint Blackbox Tests', () => {
 
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
+
+    const paymentAccountUsdcBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
+    expect(reverseDecimals(paymentAccountUsdcBalance, 6)).toBe(0);
   }, 50000);
 
   it('should not automatically withdraw DOT order until fully repaid', async () => {
@@ -305,6 +310,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     // lets wait for the changes to get propagated on chain and app to catch them
     await new Promise(resolve => setTimeout(resolve, 15000));
 
+    const halfAmountBalance = await getDotBalance(orderDetails.currency.rpc_url, paymentAccount);
+    expect(reverseDecimals(halfAmountBalance, 10)).toBe(orderDetails.amount/2);
+
     let repaidOrderDetails = await getOrderDetails(orderId);
     expect(repaidOrderDetails.payment_status).toBe('pending');
     expect(repaidOrderDetails.withdrawal_status).toBe('waiting');
@@ -323,6 +331,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     repaidOrderDetails = await getOrderDetails(orderId);
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
+
+    const paymentAccountDotBalance = await getDotBalance(orderDetails.currency.rpc_url, paymentAccount);
+    expect(reverseDecimals(paymentAccountDotBalance, 10)).toBe(0);
   }, 100000);
 
   it('should not automatically withdraw USDC order until fully repaid', async () => {
@@ -345,6 +356,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     // lets wait for the changes to get propagated on chain and app to catch them
     await new Promise(resolve => setTimeout(resolve, 15000));
 
+    const halfAmountBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
+    expect(reverseDecimals(halfAmountBalance, 6)).toBe(halfAmount);
+
     let repaidOrderDetails = await getOrderDetails(orderId);
     expect(repaidOrderDetails.payment_status).toBe('pending');
     expect(repaidOrderDetails.withdrawal_status).toBe('waiting');
@@ -363,6 +377,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     repaidOrderDetails = await getOrderDetails(orderId);
     expect(repaidOrderDetails.payment_status).toBe('paid');
     expect(repaidOrderDetails.withdrawal_status).toBe('completed');
+
+    const paymentAccountUsdcBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
+    expect(reverseDecimals(paymentAccountUsdcBalance, 6)).toBe(0);
   }, 100000);
 
   it('should not update order if received payment in wrong currency', async () => {
@@ -400,6 +417,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     // lets wait for the changes to get propagated on chain and app to catch them
     await new Promise(resolve => setTimeout(resolve, 15000));
 
+    const halfAmountBalance = await getDotBalance(orderDetails.currency.rpc_url, paymentAccount);
+    expect(reverseDecimals(halfAmountBalance, 10)).toBe(orderDetails.amount/2);
+
     const partiallyRepaidOrderDetails = await getOrderDetails(orderId);
     expect(partiallyRepaidOrderDetails.payment_status).toBe('pending');
     expect(partiallyRepaidOrderDetails.withdrawal_status).toBe('waiting');
@@ -411,6 +431,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     let forcedOrderDetails = await getOrderDetails(orderId);
     expect(forcedOrderDetails.payment_status).toBe('pending');
     expect(forcedOrderDetails.withdrawal_status).toBe('forced');
+
+    const paymentAccountDotBalance = await getDotBalance(orderDetails.currency.rpc_url, paymentAccount);
+    expect(reverseDecimals(paymentAccountDotBalance, 10)).toBe(0);
   }, 100000);
 
   it('should be able to force withdraw partially repayed USDC order', async () => {
@@ -425,6 +448,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     // lets wait for the changes to get propagated on chain and app to catch them
     await new Promise(resolve => setTimeout(resolve, 15000));
 
+    const halfAmountBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
+    expect(reverseDecimals(halfAmountBalance, 6)).toBe(usdcOrderData.amount/2);
+
     const partiallyRepaidOrderDetails = await getOrderDetails(orderId);
     expect(partiallyRepaidOrderDetails.payment_status).toBe('pending');
     expect(partiallyRepaidOrderDetails.withdrawal_status).toBe('waiting');
@@ -436,6 +462,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     let forcedOrderDetails = await getOrderDetails(orderId);
     expect(forcedOrderDetails.payment_status).toBe('pending');
     expect(forcedOrderDetails.withdrawal_status).toBe('forced');
+
+    const paymentAccountUsdcBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
+    expect(reverseDecimals(paymentAccountUsdcBalance, 6)).toBe(0);
   }, 100000);
 
   it('should return 404 for non-existing order on force withdrawal', async () => {
