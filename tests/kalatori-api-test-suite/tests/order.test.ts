@@ -445,13 +445,21 @@ describe('Order Endpoint Blackbox Tests', () => {
     const paymentAccount = orderDetails.payment_account;
     expect(paymentAccount).toBeDefined();
 
-    await transferFunds(orderDetails.currency.rpc_url, paymentAccount, usdcOrderData.amount/2);
+    const halfAmount = orderDetails.amount/2;
+
+    // Partial repayment
+    await transferFunds(
+        orderDetails.currency.rpc_url,
+        paymentAccount,
+        halfAmount,
+        orderDetails.currency.asset_id
+    );
 
     // lets wait for the changes to get propagated on chain and app to catch them
     await new Promise(resolve => setTimeout(resolve, 15000));
 
     const halfAmountBalance = await getAssetBalance(orderDetails.currency.rpc_url, paymentAccount, orderDetails.currency.asset_id);
-    expect(reverseDecimals(halfAmountBalance, 6)).toBe(usdcOrderData.amount/2);
+    expect(reverseDecimals(halfAmountBalance, 6)).toBe(halfAmount);
 
     const partiallyRepaidOrderDetails = await getOrderDetails(orderId);
     expect(partiallyRepaidOrderDetails.payment_status).toBe('pending');
@@ -460,6 +468,9 @@ describe('Order Endpoint Blackbox Tests', () => {
     const response = await request(baseUrl)
         .post(`/v2/order/${orderId}/forceWithdrawal`);
     expect(response.status).toBe(201);
+
+    // lets wait for the changes to get propagated on chain and app to catch them
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
     let forcedOrderDetails = await getOrderDetails(orderId);
     expect(forcedOrderDetails.payment_status).toBe('pending');
