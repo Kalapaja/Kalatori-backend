@@ -5,13 +5,13 @@ authors = [
     	"Vova Lando <vova.lando@gmail.com>",
      	"Artyom Sheviakov <fluidcells@pm.me>",
 ]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "A gateway daemon for Kalatori."
 license = "GPL-3.0-or-later"
 homepage = "https://github.com/Alzymologist/Kalatori-backend"
 repository = "https://github.com/Alzymologist/Kalatori-backend"
-documentation = "https://docs.rs/Kalatori-backend"
+documentation = "https://docs.rs/Kalatori"
 readme = "README.md"
 keywords = ["substrate", "blockchain", "finance", "service", "middleware"]
 categories = ["finance"]
