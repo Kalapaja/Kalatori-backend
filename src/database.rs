@@ -139,6 +139,13 @@ impl Database {
                     DbRequest::MarkPaid(request) => {
                         let _unused = request.res.send(mark_paid(request.order, &orders));
                     }
+                    DbRequest::UpdateRepaidAmount(request) => {
+                        let _unused = request.res.send(update_repaid_amount(
+                            request.order,
+                            request.amount,
+                            &orders,
+                        ));
+                    }
                     DbRequest::IsMarkedPaid(order, res) => {
                         let _unused = res.send(is_marked_paid(&orders, order));
                     }
@@ -273,6 +280,15 @@ impl Database {
         rx.await.map_err(|_| DbError::DbEngineDown)?
     }
 
+    pub async fn update_repaid_amount(&self, order: String, amount: f64) -> Result<(), DbError> {
+        let (res, rx) = oneshot::channel();
+        let _unused = self
+            .tx
+            .send(DbRequest::UpdateRepaidAmount(UpdateRepaidAmount { order, amount, res }))
+            .await;
+        rx.await.map_err(|_| DbError::DbEngineDown)?
+    }
+
     pub async fn is_marked_paid(&self, order: String) -> Result<bool, DbError> {
         let (res, rx) = oneshot::channel();
         let _unused = self.tx.send(DbRequest::IsMarkedPaid(order, res)).await;
@@ -317,6 +333,7 @@ enum DbRequest {
     ActiveOrderList(oneshot::Sender<Result<Vec<(String, OrderInfo)>, DbError>>),
     ReadOrder(ReadOrder),
     MarkPaid(MarkPaid),
+    UpdateRepaidAmount(UpdateRepaidAmount),
     MarkWithdrawn(ModifyOrder),
     MarkForced(ModifyOrder),
     IsMarkedPaid(String, oneshot::Sender<Result<bool, DbError>>),
@@ -351,6 +368,12 @@ pub struct ModifyOrder {
 pub struct MarkPaid {
     pub order: String,
     pub res: oneshot::Sender<Result<OrderInfo, DbError>>,
+}
+
+pub struct UpdateRepaidAmount {
+    pub order: String,
+    pub amount: f64,
+    pub res: oneshot::Sender<Result<(), DbError>>,
 }
 
 fn calculate_death_ts(account_lifetime: Timestamp) -> Timestamp {
@@ -519,6 +542,22 @@ fn mark_paid(order: String, orders: &Tree) -> Result<OrderInfo, DbError> {
             Ok(order_info)
         } else {
             Err(DbError::AlreadyPaid(order))
+        }
+    } else {
+        Err(DbError::OrderNotFound(order))
+    }
+}
+
+fn update_repaid_amount(order: String, amount: f64, orders: &Tree) -> Result<(), DbError> {
+    let order_key = order.encode();
+    if let Some(order_info) = orders.get(order_key)? {
+        let mut order_info = OrderInfo::decode(&mut &order_info[..])?;
+        if order_info.payment_status == PaymentStatus::Paid {
+            order_info.repaid_amount += amount;
+            orders.insert(order.encode(), order_info.encode())?;
+            Ok(())
+        } else {
+            Err(DbError::NotPaid(order))
         }
     } else {
         Err(DbError::OrderNotFound(order))
