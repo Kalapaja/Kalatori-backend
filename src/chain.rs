@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use substrate_crypto_light::common::AccountId32;
 use tokio::{
     sync::{mpsc, oneshot},
-    time::{timeout, Duration},
+    time::{timeout, Duration, sleep},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -166,6 +166,8 @@ impl ChainManager {
                         }
                         else => break,
                     }
+
+                    sleep(Duration::from_millis(500)).await;
                 }
 
                 Ok("Chain manager is shutting down")

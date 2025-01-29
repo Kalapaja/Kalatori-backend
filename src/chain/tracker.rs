@@ -32,7 +32,7 @@ use substrate_parser::{AsMetadata, ShortSpecs};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::{
     sync::mpsc,
-    time::{timeout, Duration},
+    time::{timeout, Duration, sleep},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -285,6 +285,8 @@ pub fn start_chain_watch(
                                 break;
                             }
                         }
+
+                        sleep(Duration::from_millis(100)).await;
                     }
                 } else {
                     drop(rpc_update_tx.send(RpcInfo {
